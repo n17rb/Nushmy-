@@ -34,6 +34,15 @@ const E = {
   UPLOAD_TOO_LARGE:       () => new AppError('UPLOAD_TOO_LARGE', 'حجم الصورة كبير. الحد الأقصى 2 ميجابايت', 413),
   UPLOAD_INVALID_TYPE:    () => new AppError('UPLOAD_INVALID_TYPE', 'نوع الملف غير مدعوم. استخدم صورة JPG أو PNG', 400),
   RATE_LIMITED:           () => new AppError('RATE_LIMITED', 'طلبات كثيرة جداً. حاول بعد قليل', 429),
+  CAPTAIN_NOT_REGISTERED: () => new AppError('CAPTAIN_NOT_REGISTERED', 'لم تسجّل ككابتن بعد', 403),
+  CAPTAIN_NOT_APPROVED:   () => new AppError('CAPTAIN_NOT_APPROVED', 'حسابك قيد المراجعة. سنبلغك عند الموافقة', 403),
+  CAPTAIN_ALREADY:        () => new AppError('CAPTAIN_ALREADY', 'أنت مسجّل ككابتن مسبقاً', 409),
+  CAPTAIN_BUSY:           () => new AppError('CAPTAIN_BUSY', 'عندك رحلة نشطة حالياً', 409),
+  WALLET_LOW:             (m) => new AppError('WALLET_LOW', m || 'رصيد محفظتك أقل من الحد المسموح. اشحن رصيدك لتستقبل رحلات', 403),
+  OFFER_EXPIRED:          () => new AppError('OFFER_EXPIRED', 'انتهى وقت هذا الطلب', 409),
+  LOCATION_REQUIRED:      () => new AppError('LOCATION_REQUIRED', 'موقعك غير معروف. فعّل الموقع وحاول مرة ثانية', 409),
+  TOO_FAR_FROM_PICKUP:    (m) => new AppError('TOO_FAR_FROM_PICKUP', `أنت بعيد عن مكان الزبون (${m} م). اقترب أكثر ثم اضغط «وصلت»`, 409),
+  NO_SHOW_TOO_EARLY:      (s) => new AppError('NO_SHOW_TOO_EARLY', `انتظر ${s} ثانية أخرى قبل تسجيل عدم حضور الزبون`, 409),
   INTERNAL:               () => new AppError('INTERNAL', 'خطأ غير متوقع في الخادم. تم تسجيله وسنراجعه', 500),
 };
 
