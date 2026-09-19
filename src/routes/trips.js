@@ -21,14 +21,18 @@ async function vehicleTypes(req, res) {
   return ok(res, { vehicleTypes: rows });
 }
 
+/**
+ * منطقة الخدمة التي تحتوي النقطة.
+ * إذا وقعت النقطة داخل أكثر من منطقة (مثلاً الكرك وكل الأردن) نختار الأضيق — الأكثر تحديداً.
+ */
 async function resolveCity({ lat, lng }) {
   const cities = await db.query('SELECT * FROM cities WHERE is_active = 1', []);
-  let best = null, bestD = Infinity;
+  let best = null;
   for (const c of cities) {
     const d = geo.haversine({ lat, lng }, { lat: c.center_lat, lng: c.center_lng });
-    if (d < bestD) { bestD = d; best = c; }
+    if (d > c.radius_km * 1000) continue;
+    if (!best || c.radius_km < best.radius_km) best = c;
   }
-  if (!best || bestD > best.radius_km * 1000) return null;
   return best;
 }
 
