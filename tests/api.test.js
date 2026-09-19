@@ -268,3 +268,26 @@ test('السيارات القريبة: تُعرض فقط للكباتن الحق
   const anon = await call('/api/captains/nearby?lat=31.185&lng=35.7047');
   assert.equal(anon.status, 401);
 });
+
+test('منطقة الخدمة: الكرك دائماً، وعمّان فقط عند تفعيل «كل الأردن»', async () => {
+  const token = await login('0790000113');
+  const amman = { pickupLat: 31.9772, pickupLng: 35.8847, destLat: 31.9630, destLng: 35.9060 };
+  const off = await call('/api/trips/estimate', { method: 'POST', token, body: amman });
+  assert.equal(off.status, 400);
+  assert.equal(off.data.error.code, 'OUT_OF_SERVICE_AREA');
+
+  process.env.SERVICE_ALL_JORDAN = '1';
+  await seed.run({ quiet: true });
+  const on = await call('/api/trips/estimate', { method: 'POST', token, body: amman });
+  assert.equal(on.status, 200, JSON.stringify(on.data));
+  assert.equal(on.data.cityName, 'الأردن');
+  const karak = await call('/api/trips/estimate', {
+    method: 'POST', token, body: { pickupLat: 31.185, pickupLng: 35.7047, destLat: 31.17, destLng: 35.72 },
+  });
+  assert.equal(karak.data.cityName, 'الكرك', 'داخل الكرك تبقى المنطقة الأدق هي الكرك');
+
+  delete process.env.SERVICE_ALL_JORDAN;
+  await seed.run({ quiet: true });
+  const back = await call('/api/trips/estimate', { method: 'POST', token, body: amman });
+  assert.equal(back.data.error.code, 'OUT_OF_SERVICE_AREA', 'بعد حذف المتغير ترجع الكرك فقط');
+});
