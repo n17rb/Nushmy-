@@ -1,0 +1,16 @@
+{
+  "name": "نشمي",
+  "short_name": "نشمي",
+  "description": "اطلب سيارتك بسهولة",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#A60E35",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/img/logo-mark.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/img/logo-mark.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
