@@ -42,6 +42,13 @@ window.Icon = (function () {
     share:    '<circle cx="17" cy="6" r="2.5"/><circle cx="7" cy="12" r="2.5"/><circle cx="17" cy="18" r="2.5"/><path d="M9.2 10.8l5.6-3.3M9.2 13.2l5.6 3.3"/>',
     alert:    '<path d="M12 4.5l8.5 15H3.5z"/><path d="M12 10v4"/><circle cx="12" cy="16.8" r=".9" fill="currentColor" stroke="none"/>',
     empty:    '<rect x="3.5" y="6" width="17" height="13" rx="2.5"/><path d="M3.5 11h17M8 6V3.5M16 6V3.5"/>',
+    power:    '<path d="M12 3.5v8"/><path d="M7.2 6.3a7.5 7.5 0 109.6 0"/>',
+    flag:     '<path d="M5.5 21V4"/><path d="M5.5 4.5h11l-2.2 4 2.2 4h-11"/>',
+    target:   '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>',
+    upload:   '<path d="M12 16V4.5M7.5 9L12 4.5 16.5 9"/><path d="M4.5 15.5v2.5a1.5 1.5 0 001.5 1.5h12a1.5 1.5 0 001.5-1.5v-2.5"/>',
+    doc:      '<path d="M7 3.5h7l4 4V19a1.5 1.5 0 01-1.5 1.5h-9.5A1.5 1.5 0 015.5 19V5A1.5 1.5 0 017 3.5z"/><path d="M13.5 3.5V8H18M9 12.5h6M9 16h6"/>',
+    chart:    '<path d="M4.5 19.5h15"/><path d="M7.5 16v-4M12 16V8M16.5 16v-6"/>',
+    swap:     '<path d="M7 7h11l-3-3M17 17H6l3 3"/>',
   };
 
   return function Icon(name, size = 22, extra = '') {
