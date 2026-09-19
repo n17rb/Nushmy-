@@ -1,0 +1,17 @@
+{
+  "name": "نشمي كابتن",
+  "short_name": "نشمي كابتن",
+  "description": "استقبل رحلات في الكرك واربح أكثر",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/captain/",
+  "scope": "/captain/",
+  "display": "standalone",
+  "background_color": "#0C0D10",
+  "theme_color": "#0C0D10",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/img/logo-mark.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/img/logo-mark.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
