@@ -170,6 +170,19 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
 .amt-neg { color: var(--danger-500); font-weight: 800; }
 .change { font-size: 12.5px; color: var(--text-2); direction: ltr; unicode-bidi: isolate; font-family: ui-monospace, Menlo, monospace; }
 
+/* ------------------------------- واتساب ------------------------------- */
+.wa-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.wa-step { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); }
+.wa-step b { display: block; font-size: 14.5px; }
+.wa-step p { margin: 3px 0 0; font-size: 13.5px; color: var(--text-2); overflow-wrap: anywhere; }
+.wa-mark { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 14px; }
+.wa-step--ok .wa-mark { background: var(--success-100); color: var(--success-500); }
+.wa-step--warn .wa-mark { background: var(--warning-100); color: var(--warning-500); }
+.wa-step--bad .wa-mark { background: var(--danger-100); color: var(--danger-500); }
+.wa-step--live .wa-mark { background: var(--brand-100); color: var(--brand-700); }
+.wa-err { margin-top: 10px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--danger-100); color: var(--danger-500); font-size: 13.5px; }
+.wa-ok { margin-top: 10px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--success-100); color: var(--success-500); font-size: 13.5px; font-weight: 700; }
+
 /* ------------------------------- الدخول ------------------------------- */
 .login { grid-column: 1 / -1; display: grid; place-items: center; padding: 24px; }
 .login__card { width: min(400px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-2xl); padding: 32px 28px; display: grid; gap: 14px; }
