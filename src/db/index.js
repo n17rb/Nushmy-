@@ -89,6 +89,11 @@ const COLUMN_MIGRATIONS = [
   ['trips', 'accepted_at', 'TEXT'],
   ['trips', 'waiting_fee_fils', 'INTEGER NOT NULL DEFAULT 0'],
   ['captains', 'daily_goal_fils', 'INTEGER'],
+  ['captains', 'status_reason', 'TEXT'],
+  ['users', 'admin_role', 'TEXT'],
+  ['users', 'status_reason', 'TEXT'],
+  ['captain_documents', 'reviewed_by', 'TEXT'],
+  ['captain_documents', 'reviewed_at', 'TEXT'],
 ];
 
 async function ensureColumn(table, column, ddl) {
