@@ -124,7 +124,7 @@
     let framed = false;
     async function refresh() {
       let d; try { d = await API.get(api('/live')); } catch { return; }
-      if (map._gone) return;
+      if (map._gone || !map.getContainer().isConnected) return;
       const seen = new Set();
       for (const c of d.captains) {
         seen.add(c.id);
@@ -203,7 +203,7 @@
     openTrip(node.querySelector('tbody'));
     const live = liveLayer(newMap(node.querySelector('[data-map]')));
     live.refresh();
-    A.every(10000, () => live.refresh());
+    A.every(10000, () => live.refresh(), node);
   };
 
   /* ================================ الخريطة الحية ================================ */
@@ -223,7 +223,7 @@
         <div class="kpi"><div class="kpi__label">رحلات جارية</div><div class="kpi__value">${d.trips.length - searching}</div></div>`;
     });
     await layer.refresh();
-    A.every(5000, () => layer.refresh());
+    A.every(5000, () => layer.refresh(), node);
   };
 
   /* ================================== الرحلات ================================== */
@@ -627,6 +627,78 @@
       if (!(await UI.confirm({ title: on ? 'تفعيل المنطقة؟' : 'إيقاف الخدمة بهذه المنطقة؟', body: on ? '' : 'العملاء بهذه المنطقة ما رح يقدروا يطلبوا.', confirmText: on ? 'تفعيل' : 'إيقاف', danger: !on }))) return;
       if (await act(b, () => API.patch(api('/cities/' + b.dataset.city), { isActive: on }), 'تم')) A.route();
     });
+  };
+
+  /* ================================== واتساب ================================== */
+  P.whatsapp = async (main) => {
+    const MARK = { ok: ['✓', 'ok'], warn: ['!', 'warn'], bad: ['✕', 'bad'], todo: ['…', 'live'] };
+    const node = render(main, `
+      ${head('واتساب', 'رموز الدخول على واتساب. الصفحة بتحكي مع Meta مباشرة وبتقلك بالضبط شو ناقص.')}
+      <div class="panel" data-steps><div class="skeleton" style="height:180px"></div></div>
+      <div class="panel" data-actions></div>`);
+    const stepsEl = node.querySelector('[data-steps]');
+    const actEl = node.querySelector('[data-actions]');
+    const errBox = (e) => e ? `<div class="wa-err"><b>${esc(e.ar || '')}</b>${e.message ? `<div class="change" style="margin-top:6px">${esc(e.message)}${e.code ? ` (code ${esc(e.code)}${e.subcode ? '/' + esc(e.subcode) : ''})` : ''}</div>` : ''}</div>` : '';
+
+    async function load() {
+      stepsEl.innerHTML = '<div class="skeleton" style="height:180px"></div>';
+      let d;
+      try { d = await API.get(api('/whatsapp')); }
+      catch (e) { stepsEl.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+      stepsEl.innerHTML = `
+        <div class="panel__title"><h2>الفحص</h2><div class="spacer"></div>
+          ${d.ready || d.provider === 'whatsapp' ? '<span class="pill pill--ok">جاهز</span>' : '<span class="pill pill--warn">مش جاهز لسا</span>'}
+          <button class="btn btn--ghost" data-reload>إعادة الفحص</button></div>
+        <ol class="wa-steps">${d.steps.map((s) => `
+          <li class="wa-step wa-step--${MARK[s.state][1]}">
+            <span class="wa-mark">${MARK[s.state][0]}</span>
+            <div><b>${esc(s.title)}</b><p>${esc(s.detail)}</p>${errBox(s.error)}</div>
+          </li>`).join('')}</ol>`;
+      stepsEl.querySelector('[data-reload]').onclick = load;
+
+      const tplStep = d.steps.find((s) => s.key === 'template');
+      const tokenOk = d.steps.some((s) => s.key === 'token' && s.state === 'ok');
+      actEl.innerHTML = `
+        <div class="panel__title"><h2>الأدوات</h2></div>
+        <div style="display:grid;gap:18px">
+          <div>
+            <b>1. إنشاء القالب «${esc(d.template)}»</b>
+            <p class="muted sm" style="margin:4px 0 10px">بيعمل قالب المصادقة (لغة ${esc(d.lang)}، زر «نسخ الرمز») مباشرة عند Meta. إذا رفضت، بيطلعلك السبب الحقيقي.</p>
+            <button class="btn btn--primary" data-create ${tokenOk && tplStep && tplStep.canCreate ? '' : 'disabled'}>إنشاء القالب</button>
+            <div data-create-out></div>
+          </div>
+          <div>
+            <b>2. إرسال رمز تجربة</b>
+            <p class="muted sm" style="margin:4px 0 10px">بيبعت رمز على واتساب بنفس شكل رسالة الدخول. فاضي = رقمك إنت.</p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+              <input class="in" data-phone inputmode="tel" placeholder="07XXXXXXXX (اختياري)" style="max-width:220px;direction:ltr;text-align:start">
+              <button class="btn btn--ok" data-test ${tokenOk ? '' : 'disabled'}>إرسال رمز تجربة</button>
+            </div>
+            <div data-test-out></div>
+          </div>
+        </div>`;
+      const create = actEl.querySelector('[data-create]');
+      create.onclick = async () => {
+        const out = actEl.querySelector('[data-create-out]');
+        const r = await act(create, () => API.post(api('/whatsapp/template')));
+        if (!r) return;
+        out.innerHTML = r.ok
+          ? `<div class="wa-ok">${r.exists ? 'القالب موجود أصلاً ✓' : `انعمل القالب ✓ — حالته: ${esc(r.status || 'PENDING')}. Meta بتراجعه عادةً خلال دقائق، اكبس «إعادة الفحص» بعد شوي.`}</div>`
+          : errBox(r.error);
+        if (r.ok) setTimeout(load, 1500);
+      };
+      const test = actEl.querySelector('[data-test]');
+      test.onclick = async () => {
+        const out = actEl.querySelector('[data-test-out]');
+        const phone = actEl.querySelector('[data-phone]').value.trim();
+        const r = await act(test, () => API.post(api('/whatsapp/test'), phone ? { phone } : {}));
+        if (!r) return;
+        out.innerHTML = r.ok
+          ? `<div class="wa-ok">انبعت ✓ على ${esc(r.to)} — شيك واتساب. إذا وصلك، غيّر SMS_PROVIDER لـ whatsapp بـ Render.</div>`
+          : errBox(r.error);
+      };
+    }
+    await load();
   };
 
   /* ================================== المشرفون ================================== */
