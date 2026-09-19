@@ -51,6 +51,8 @@ module.exports = {
     whatsapp: {
       token: process.env.WHATSAPP_TOKEN || '',
       phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
+      // معرّف حساب واتساب للأعمال (WABA) — لازم لصفحة «واتساب» بلوحة الإدارة (فحص الحساب وإنشاء القالب)
+      wabaId: process.env.WHATSAPP_WABA_ID || '',
       template: process.env.WHATSAPP_TEMPLATE || 'nashmi_otp',
       lang: process.env.WHATSAPP_TEMPLATE_LANG || 'ar',
       apiVersion: process.env.WHATSAPP_API_VERSION || 'v21.0',
