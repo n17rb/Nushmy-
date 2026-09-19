@@ -20,5 +20,7 @@ services:
         value: "1"
       - key: CAPTAIN_AUTO_APPROVE   # للمعاينة فقط — احذفه بعد تجهيز لوحة الإدارة
         value: "1"
+      - key: SERVICE_ALL_JORDAN     # 1 = كل الأردن مؤقتاً، احذفه لترجع للكرك فقط
+        value: "1"
       - key: DATABASE_URL
         sync: false   # ضع رابط Neon من لوحة Render
