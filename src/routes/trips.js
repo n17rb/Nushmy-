@@ -319,6 +319,7 @@ async function view(tripId, customerId) {
     paymentMethod: t.payment_method,
     captain,
     requestedAt: t.requested_at,
+    arrivedAt: t.arrived_at,
     completedAt: t.completed_at,
     searchElapsedSec: Math.round((Date.now() - Date.parse(t.requested_at)) / 1000),
   };
