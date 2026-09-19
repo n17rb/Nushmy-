@@ -1,6 +1,6 @@
 /* عامل الخدمة: يخزّن هيكل التطبيق ليفتح بسرعة وحتى مع إنترنت ضعيف.
    لا يخزّن أي استجابة من /api — بيانات الرحلات تأتي من الخادم دائماً. */
-const CACHE = 'nashmi-shell-v4';
+const CACHE = 'nashmi-shell-v5';
 const SHELL = [
   '/', '/index.html', '/manifest.webmanifest',
   '/css/tokens.css', '/css/app.css',
