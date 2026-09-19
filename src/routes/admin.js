@@ -643,6 +643,32 @@ async function adminRemove(req, res, ctx, params) {
   return ok(res, {});
 }
 
+/* ================================== واتساب ================================== */
+const whatsapp = require('../services/whatsapp');
+const otpService = require('../services/otp');
+
+async function whatsappStatus(req, res, ctx) {
+  await requireAdmin(ctx, 'settings');
+  return ok(res, await whatsapp.status());
+}
+
+async function whatsappTemplate(req, res, ctx) {
+  const admin = await requireAdmin(ctx, 'settings');
+  const r = await whatsapp.createTemplate();
+  await audit(admin, 'WHATSAPP_TEMPLATE', 'setting', config.sms.whatsapp.template, null,
+    { ok: r.ok, status: r.status || (r.exists ? 'EXISTS' : null), error: r.error ? `${r.error.code || ''} ${r.error.message || ''}`.trim() : null }, null, ctx.ip);
+  return ok(res, r);
+}
+
+async function whatsappTest(req, res, ctx) {
+  const admin = await requireAdmin(ctx, 'settings');
+  const body = await parseJson(req);
+  const phone = body.phone ? normalizeJordanPhone(body.phone) : admin.phone_e164;
+  const r = await whatsapp.sendTest(phone, otpService.generateCode(config.otp.length));
+  await audit(admin, 'WHATSAPP_TEST', 'user', admin.id, null, { to: phone, ok: r.ok, error: r.error ? r.error.code : null }, null, ctx.ip);
+  return ok(res, { ...r, to: phone });
+}
+
 /* ================================== السجل ================================== */
 const ACTION_LABEL = {
   TRIP_CANCELLED: 'إلغاء رحلة', CAPTAIN_STATUS: 'تغيير حالة كابتن', CAPTAIN_FORCED_OFFLINE: 'فصل كابتن',
@@ -650,6 +676,7 @@ const ACTION_LABEL = {
   WALLET_REFUND: 'استرجاع', DEPOSIT_APPROVED: 'موافقة شحن', DEPOSIT_REJECTED: 'رفض شحن', USER_STATUS: 'تغيير حالة حساب',
   PRICING_UPDATED: 'تعديل أسعار', SETTING_UPDATED: 'تعديل إعداد', CITY_UPDATED: 'تعديل منطقة', ADMIN_GRANTED: 'إضافة مشرف',
   ADMIN_REVOKED: 'إزالة مشرف', CAPTAIN_REGISTERED: 'تسجيل كابتن', DEPOSIT_REQUESTED: 'طلب شحن',
+  WHATSAPP_TEMPLATE: 'إنشاء قالب واتساب', WHATSAPP_TEST: 'رمز تجربة واتساب',
 };
 
 async function auditList(req, res, ctx) {
@@ -673,4 +700,5 @@ module.exports = {
   captains, captainDetail, captainStatus, captainOffline, documentReview, fileView, walletAdjust,
   deposits, depositApprove, depositReject, customers, customerDetail, customerStatus,
   pricingList, pricingUpdate, settingsList, settingUpdate, cityUpdate, admins, adminAdd, adminRemove, auditList,
+  whatsappStatus, whatsappTemplate, whatsappTest,
 };
