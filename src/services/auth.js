@@ -84,6 +84,7 @@ function publicUser(u) {
     email: u.email,
     photoUrl: u.photo_url,
     role: u.role,
+    adminRole: u.admin_role || null,
     language: u.language,
     theme: u.theme,
     profileComplete: Boolean(u.name && u.name.trim().length >= 2),
@@ -91,4 +92,13 @@ function publicUser(u) {
   };
 }
 
-module.exports = { findOrCreateUser, createSession, rotateSession, revokeSession, authenticate, publicUser };
+/** يرقّي أرقام المالك (ADMIN_PHONES) إلى مدير عام — يُستدعى عند الدخول وعند كل طلب إدارة */
+async function promoteOwner(user) {
+  const { normalizeJordanPhone } = require('../lib/validate');
+  const owners = require('../config').adminPhones.map((p) => { try { return normalizeJordanPhone(p); } catch { return null; } });
+  if (!owners.includes(user.phone_e164) || user.admin_role === 'SUPER_ADMIN') return user;
+  await db.query(`UPDATE users SET admin_role = 'SUPER_ADMIN', updated_at = $1 WHERE id = $2`, [nowIso(), user.id]);
+  return db.one('SELECT * FROM users WHERE id = $1', [user.id]);
+}
+
+module.exports = { findOrCreateUser, createSession, rotateSession, revokeSession, authenticate, publicUser, promoteOwner };
