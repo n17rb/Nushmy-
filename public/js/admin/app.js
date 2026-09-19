@@ -88,7 +88,15 @@ window.Admin = (function () {
   }
 
   /** مؤقت يتوقف تلقائياً عند مغادرة الصفحة */
-  function every(ms, fn) { const t = setInterval(fn, ms); state.timers.push(t); return t; }
+  /** مؤقت يتوقف لحاله لما الصفحة (node) تنشال من الشاشة أو عند التنقل */
+  function every(ms, fn, node) {
+    const nav = state.nav;
+    const t = setInterval(() => {
+      if (state.nav !== nav || (node && !node.isConnected)) return clearInterval(t);
+      fn();
+    }, ms);
+    state.timers.push(t); return t;
+  }
   function onLeave(fn) { state.cleanups.push(fn); }
 
   /* ------------------------------ الدخول ------------------------------ */
@@ -169,6 +177,7 @@ window.Admin = (function () {
     { path: 'customers', label: 'العملاء', icon: 'user' },
     { path: 'pricing', label: 'الأسعار', icon: 'receipt', perm: 'pricing' },
     { path: 'settings', label: 'الإعدادات', icon: 'settings', perm: 'settings' },
+    { path: 'whatsapp', label: 'واتساب', icon: 'chat', perm: 'settings' },
     { path: 'admins', label: 'المشرفون', icon: 'shield', perm: 'admins' },
     { path: 'audit', label: 'سجل العمليات', icon: 'doc' },
   ];
@@ -219,6 +228,7 @@ window.Admin = (function () {
   }
 
   async function route() {
+    state.nav = (state.nav || 0) + 1;
     state.timers.forEach(clearInterval); state.timers = [];
     state.cleanups.forEach((f) => { try { f(); } catch {} }); state.cleanups = [];
     const parts = (location.hash.replace(/^#\/?/, '') || 'dashboard').split('/');
@@ -227,12 +237,16 @@ window.Admin = (function () {
     const main = document.getElementById('main');
     if (!main) return;
     const page = Pages[name] || Pages.dashboard;
-    main.innerHTML = '<div class="page"><div class="skeleton" style="height:120px"></div></div>';
+    // كل صفحة بترسم بحاوية خاصة فيها: إذا صفحة قديمة خلصت تحميل متأخر، بترسم بحاوية مفصولة وما بتغطي الصفحة الجديدة
+    const host = document.createElement('div');
+    host.innerHTML = '<div class="page"><div class="skeleton" style="height:120px"></div></div>';
+    main.replaceChildren(host);
     main.scrollTop = 0;
-    try { await page(main, id); }
+    try { await page(host, id); }
     catch (e) {
+      if (!host.isConnected) return;
       if (e.code === 'UNAUTHORIZED') return loginScreen('انتهت الجلسة، ادخل مرة ثانية');
-      main.innerHTML = `<div class="page"><div class="panel"><b>تعذّر فتح الصفحة</b><p class="muted">${esc(e.message)}</p></div></div>`;
+      host.innerHTML = `<div class="page"><div class="panel"><b>تعذّر فتح الصفحة</b><p class="muted">${esc(e.message)}</p></div></div>`;
     }
   }
 
