@@ -3,8 +3,6 @@
  * واجهة الكابتن البرمجية.
  * الخادم هو صاحب القرار في كل شيء: القبول، الوصول، البدء، الإنهاء، الأجرة، العمولة، المحفظة.
  */
-const fs = require('fs');
-const path = require('path');
 const db = require('../db');
 const config = require('../config');
 const geo = require('../services/geo');
@@ -12,6 +10,7 @@ const money = require('../services/money');
 const pricing = require('../services/pricing');
 const settings = require('../services/settings');
 const wallet = require('../services/wallet');
+const files = require('../services/files');
 const S = require('../services/trip-state');
 const authService = require('../services/auth');
 const { parseJson, ok, created } = require('../lib/http');
@@ -52,19 +51,6 @@ async function totalsSince(captainId, sinceIso) {
 }
 
 function firstName(name) { return String(name || 'زبون').trim().split(/\s+/)[0]; }
-
-async function saveUpload(dataUrl, prefix, { privateDir = false, maxBytes = 1500 * 1024 } = {}) {
-  const m = /^data:(image\/(jpeg|png|webp));base64,(.+)$/.exec(String(dataUrl || ''));
-  if (!m) throw E.UPLOAD_INVALID_TYPE();
-  const buf = Buffer.from(m[3], 'base64');
-  if (buf.length > maxBytes) throw E.UPLOAD_TOO_LARGE();
-  const ext = m[2] === 'jpeg' ? 'jpg' : m[2];
-  const dir = privateDir ? path.join(config.uploadsDir, 'private') : config.uploadsDir;
-  fs.mkdirSync(dir, { recursive: true });
-  const name = `${prefix}-${uuid().slice(0, 12)}.${ext}`;
-  fs.writeFileSync(path.join(dir, name), buf);
-  return name;
-}
 
 async function audit(actorType, actorId, action, entity, entityId, after, reason = null) {
   await db.query(
@@ -164,7 +150,7 @@ async function uploadDocument(req, res, ctx) {
   const body = await parseJson(req);
   const kind = ['license', 'id', 'registration'].includes(body.kind) ? body.kind : null;
   if (!kind) throw E.VALIDATION_FAILED('نوع الوثيقة غير صحيح');
-  const name = await saveUpload(body.dataUrl, `doc-${kind}-${c.id.slice(0, 8)}`, { privateDir: true });
+  const name = await files.save(body.dataUrl, { ownerId: ctx.user.id, kind: 'doc-' + kind, isPrivate: true });
   await db.query(
     `INSERT INTO captain_documents (id, captain_id, kind, file_name, status, created_at) VALUES ($1,$2,$3,$4,'PENDING',$5)`,
     [uuid(), c.id, kind, name, nowIso()]
@@ -607,7 +593,7 @@ async function requestDeposit(req, res, ctx) {
   if (!Number.isInteger(amount) || amount < 500 || amount > 200000) throw E.VALIDATION_FAILED('المبلغ بين 0.500 و 200 دينار');
   const pending = await db.one(`SELECT COUNT(*) AS n FROM deposit_requests WHERE captain_id = $1 AND status = 'PENDING_REVIEW'`, [c.id]);
   if (Number(pending.n) >= 3) throw E.VALIDATION_FAILED('عندك 3 طلبات شحن قيد المراجعة. انتظر مراجعتها أولاً');
-  const proof = await saveUpload(body.proofDataUrl, `proof-${c.id.slice(0, 8)}`, { privateDir: true });
+  const proof = await files.save(body.proofDataUrl, { ownerId: ctx.user.id, kind: 'deposit-proof', isPrivate: true });
   const id = uuid();
   await db.query(
     `INSERT INTO deposit_requests (id, captain_id, amount_fils, proof_url, status, created_at) VALUES ($1,$2,$3,$4,'PENDING_REVIEW',$5)`,
