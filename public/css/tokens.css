@@ -1,0 +1,129 @@
+/* الخط: Noto Sans Arabic من Google Fonts (مربوط في index.html) */
+/* ==========================================================
+   نشمي — Design Tokens
+   مصدر الحقيقة الوحيد للألوان والمسافات والحواف والخطوط.
+   أي تغيير هنا ينعكس على كل الواجهات.
+   الألوان مستخرجة من الهوية البصرية المرفقة.
+   ========================================================== */
+:root {
+  /* ---- ألوان العلامة ---- */
+  --brand-900: #6E0817;
+  --brand-800: #840A1C;
+  --brand-700: #9B0C21;   /* لون الشعار */
+  --brand-600: #A60E35;   /* لون الزر الأساسي */
+  --brand-500: #C4123C;
+  --brand-100: #FBE9EC;
+  --brand-050: #FDF4F6;
+
+  --accent-600: #C70377;
+  --accent-500: #EC048C;  /* الوردي: الدبوس وزر الموقع */
+  --accent-100: #FDE6F3;
+
+  /* ---- حالات ---- */
+  --success-500: #12875A;
+  --success-100: #E3F5EC;
+  --warning-500: #B7791F;
+  --warning-100: #FDF3E2;
+  --danger-500:  #C0271F;
+  --danger-100:  #FCEBEA;
+  --info-500:    #2563A8;
+
+  /* ---- أسطح ونصوص (الوضع الفاتح) ---- */
+  --bg:          #FFFFFF;
+  --bg-sub:      #F5F7FA;
+  --surface:     #FFFFFF;
+  --surface-2:   #F7F8FA;
+  --surface-3:   #EEF1F5;
+  --border:      #E4E8EE;
+  --border-strong:#CFD5DE;
+  --text:        #15171C;
+  --text-2:      #596072;
+  --text-3:      #8A91A1;
+  --overlay:     rgba(12, 14, 18, .45);
+  --on-brand:    #FFFFFF;
+  --skeleton:    #EDF0F4;
+
+  /* ---- ظلال ---- */
+  --shadow-xs: 0 1px 2px rgba(16, 20, 28, .06);
+  --shadow-sm: 0 2px 8px rgba(16, 20, 28, .07);
+  --shadow-md: 0 8px 24px rgba(16, 20, 28, .10);
+  --shadow-lg: 0 -10px 40px rgba(16, 20, 28, .12);
+  --shadow-brand: 0 8px 22px rgba(166, 14, 53, .28);
+
+  /* ---- حواف ---- */
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 20px;
+  --r-xl: 26px;
+  --r-2xl: 32px;
+  --r-pill: 999px;
+
+  /* ---- مسافات ---- */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 40px; --s-9: 56px;
+
+  /* ---- خطوط ---- */
+  --font: "Noto Sans Arabic", "Tajawal", "IBM Plex Sans Arabic", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --fs-display: 30px;
+  --fs-h1: 24px;
+  --fs-h2: 20px;
+  --fs-h3: 17px;
+  --fs-body: 15px;
+  --fs-sm: 13px;
+  --fs-xs: 11.5px;
+  --lh-tight: 1.25;
+  --lh-body: 1.65;
+
+  /* ---- حركة ---- */
+  --ease: cubic-bezier(.22, .8, .3, 1);
+  --dur-fast: .15s;
+  --dur: .28s;
+  --dur-slow: .45s;
+
+  /* ---- أبعاد ---- */
+  --sheet-max: 520px;
+  --tap: 48px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+
+/* ---- الوضع الليلي ---- */
+:root[data-theme="dark"] {
+  --brand-600: #C4123C;
+  --brand-700: #D4173F;
+  --brand-100: #2A1017;
+  --brand-050: #1C0B10;
+  --accent-500: #FF3DA0;
+  --accent-100: #2B1020;
+
+  --bg:          #0C0D10;
+  --bg-sub:      #0C0D10;
+  --surface:     #15171C;
+  --surface-2:   #1B1E25;
+  --surface-3:   #23272F;
+  --border:      #262A33;
+  --border-strong:#39404C;
+  --text:        #F1F2F5;
+  --text-2:      #A3A9B7;
+  --text-3:      #737A89;
+  --overlay:     rgba(0, 0, 0, .6);
+  --skeleton:    #1E222A;
+
+  --success-100: #10281E;
+  --warning-100: #2A2110;
+  --danger-100:  #2A1412;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, .5);
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, .45);
+  --shadow-md: 0 10px 28px rgba(0, 0, 0, .55);
+  --shadow-lg: 0 -12px 44px rgba(0, 0, 0, .6);
+  --shadow-brand: 0 8px 22px rgba(196, 18, 60, .35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: .01ms; --dur: .01ms; --dur-slow: .01ms; }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
