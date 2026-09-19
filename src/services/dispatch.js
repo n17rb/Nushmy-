@@ -39,6 +39,7 @@ async function candidates({ pickup, vehicleTypeId, radiusM, excludeCaptainIds = 
   const staleSec = await settings.get('dispatch.stale_location_sec');
   const freshAfter = new Date(Date.now() - staleSec * 1000).toISOString();
 
+  const minBalance = await settings.get('wallet.min_balance_fils');
   const rows = await db.query(
     `SELECT c.id, c.offers_sent, c.offers_accepted, c.trips_completed, c.rating_sum, c.rating_count,
             dl.lat, dl.lng, dl.heading, dl.updated_at,
@@ -46,16 +47,22 @@ async function candidates({ pickup, vehicleTypeId, radiusM, excludeCaptainIds = 
        FROM captains c
        JOIN driver_locations dl ON dl.captain_id = c.id
        JOIN vehicles v ON v.captain_id = c.id AND v.is_active = 1
+       LEFT JOIN wallets w ON w.captain_id = c.id
       WHERE c.status = 'APPROVED'
         AND c.is_online = 1
         AND dl.updated_at > $1
         AND v.vehicle_type_id = $2
+        AND COALESCE(w.balance_fils, 0) >= $3
         AND NOT EXISTS (
               SELECT 1 FROM trips t
                WHERE t.captain_id = c.id
                  AND t.status IN ('DRIVER_ASSIGNED','DRIVER_ACCEPTED','DRIVER_ARRIVING','DRIVER_ARRIVED','TRIP_STARTED')
+            )
+        AND NOT EXISTS (
+              SELECT 1 FROM trip_offers o
+               WHERE o.captain_id = c.id AND o.status = 'SENT' AND o.expires_at > $4
             )`,
-    [freshAfter, vehicleTypeId]
+    [freshAfter, vehicleTypeId, minBalance, new Date().toISOString()]
   );
 
   const excluded = new Set(excludeCaptainIds);
@@ -106,7 +113,8 @@ async function sendBatch(trip) {
   // توسيع تدريجي للنطاق كل 20 ثانية
   const radiusM = Math.min(maxRadius, initialRadius * (1 + Math.floor(elapsedSec / 20)));
 
-  const prior = await db.query('SELECT captain_id FROM trip_offers WHERE trip_id = $1', [trip.id]);
+  // نستبعد من رفض أو تجاهل أو اعتذر — لا من سبقه كابتن آخر (SUPERSEDED)
+  const prior = await db.query(`SELECT captain_id FROM trip_offers WHERE trip_id = $1 AND status <> 'SUPERSEDED'`, [trip.id]);
   const exclude = prior.map((p) => p.captain_id);
 
   const pool = await candidates({ pickup, vehicleTypeId: trip.vehicle_type_id, radiusM, excludeCaptainIds: exclude });
