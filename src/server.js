@@ -21,6 +21,7 @@ const profileRoutes = require('./routes/profile');
 const placesRoutes = require('./routes/places');
 const tripRoutes = require('./routes/trips');
 const captainRoutes = require('./routes/captains');
+const cap = require('./routes/captain');
 
 /* ----------------------------- الموجِّه ----------------------------- */
 const routes = [];
@@ -42,6 +43,27 @@ add('DELETE','/api/places/:id',      placesRoutes.remove);
 
 add('GET',  '/api/vehicle-types',    tripRoutes.vehicleTypes, { auth: false });
 add('GET',  '/api/captains/nearby',  captainRoutes.nearby);
+
+// ----- تطبيق الكابتن -----
+add('GET',  '/api/captain/me',                 cap.me);
+add('POST', '/api/captain/register',           cap.register);
+add('POST', '/api/captain/documents',          cap.uploadDocument);
+add('PATCH','/api/captain/goal',               cap.setGoal);
+add('POST', '/api/captain/online',             cap.setOnline);
+add('POST', '/api/captain/location',           cap.updateLocation);
+add('GET',  '/api/captain/offer',              cap.currentOffer);
+add('POST', '/api/captain/offers/:id/accept',  cap.acceptOffer);
+add('POST', '/api/captain/offers/:id/reject',  cap.rejectOffer);
+add('GET',  '/api/captain/trip',               cap.activeTrip);
+add('GET',  '/api/captain/trips/:id',          cap.getTrip);
+add('POST', '/api/captain/trips/:id/arrived',  cap.arrived);
+add('POST', '/api/captain/trips/:id/start',    cap.start);
+add('POST', '/api/captain/trips/:id/complete', cap.complete);
+add('POST', '/api/captain/trips/:id/cancel',   cap.cancel);
+add('POST', '/api/captain/trips/:id/rate',     cap.rateCustomer);
+add('GET',  '/api/captain/earnings',           cap.earnings);
+add('GET',  '/api/captain/wallet',             cap.walletView);
+add('POST', '/api/captain/wallet/deposits',    cap.requestDeposit);
 add('POST', '/api/trips/estimate',   tripRoutes.estimate);
 add('POST', '/api/trips',            tripRoutes.create);
 add('GET',  '/api/trips/active',     tripRoutes.active);
@@ -101,6 +123,12 @@ function serveStatic(req, res, pathname) {
   const target = path.normalize(path.join(PUBLIC_DIR, rel));
   if (!target.startsWith(PUBLIC_DIR)) return false;
   if (serveFile(res, target)) return true;
+  // تطبيق الكابتن له صفحته الخاصة تحت /captain
+  if (rel === '/captain' || rel.startsWith('/captain/')) {
+    if (rel === '/captain') { res.writeHead(301, { Location: '/captain/' }); res.end(); return true; }
+    if (!path.extname(rel)) return serveFile(res, path.join(PUBLIC_DIR, 'captain', 'index.html'));
+    return false;
+  }
   // تطبيق صفحة واحدة: أي مسار غير معروف يعيد index.html
   if (!rel.startsWith('/api') && !path.extname(rel)) return serveFile(res, path.join(PUBLIC_DIR, 'index.html'));
   return false;
