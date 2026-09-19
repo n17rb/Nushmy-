@@ -145,7 +145,7 @@ window.Screens = window.Screens || {};
       left -= 1;
     };
     const timer = setInterval(tick, 1000); tick();
-    node.addEventListener('DOMNodeRemoved', () => clearInterval(timer), { once: true });
+    UI.onLeave(node, () => clearInterval(timer));
 
     resend.onclick = async () => {
       busy(resend, true);
@@ -168,7 +168,7 @@ window.Screens = window.Screens || {};
         clearInterval(timer);
         API.setToken(res.accessToken);
         App.setUser(res.user);
-        if (!res.user.profileComplete) show(Screens.completeProfile());
+        if (!res.user.profileComplete && !App.skipProfileStep) show(Screens.completeProfile());
         else App.go('home');
       } catch (e) {
         err.textContent = e.message; err.classList.remove('hidden');
