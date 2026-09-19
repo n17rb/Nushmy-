@@ -80,5 +80,28 @@ window.API = (function () {
     cancelPreview: (id) => raw('/api/trips/' + id + '/cancel-preview'),
     cancelTrip:    (id, reason) => raw('/api/trips/' + id + '/cancel', { method: 'POST', body: { reason } }),
     rateTrip:      (id, b) => raw('/api/trips/' + id + '/rate', { method: 'POST', body: b }),
+
+    // ----- تطبيق الكابتن -----
+    cap: {
+      me:        ()        => raw('/api/captain/me'),
+      register:  (b)       => raw('/api/captain/register', { method: 'POST', body: b }),
+      document:  (kind, dataUrl) => raw('/api/captain/documents', { method: 'POST', body: { kind, dataUrl } }),
+      goal:      (goalFils) => raw('/api/captain/goal', { method: 'PATCH', body: { goalFils } }),
+      online:    (online)  => raw('/api/captain/online', { method: 'POST', body: { online } }),
+      location:  (b)       => raw('/api/captain/location', { method: 'POST', body: b }),
+      offer:     ()        => raw('/api/captain/offer'),
+      accept:    (id)      => raw('/api/captain/offers/' + id + '/accept', { method: 'POST', body: {} }),
+      reject:    (id)      => raw('/api/captain/offers/' + id + '/reject', { method: 'POST', body: {} }),
+      activeTrip:()        => raw('/api/captain/trip'),
+      trip:      (id)      => raw('/api/captain/trips/' + id),
+      arrived:   (id)      => raw('/api/captain/trips/' + id + '/arrived', { method: 'POST', body: {} }),
+      start:     (id)      => raw('/api/captain/trips/' + id + '/start', { method: 'POST', body: {} }),
+      complete:  (id)      => raw('/api/captain/trips/' + id + '/complete', { method: 'POST', body: {} }),
+      cancel:    (id, b)   => raw('/api/captain/trips/' + id + '/cancel', { method: 'POST', body: b }),
+      rate:      (id, stars) => raw('/api/captain/trips/' + id + '/rate', { method: 'POST', body: { stars } }),
+      earnings:  (range)   => raw('/api/captain/earnings?range=' + (range || 'today')),
+      wallet:    ()        => raw('/api/captain/wallet'),
+      deposit:   (amountFils, proofDataUrl) => raw('/api/captain/wallet/deposits', { method: 'POST', body: { amountFils, proofDataUrl } }),
+    },
   };
 })();
