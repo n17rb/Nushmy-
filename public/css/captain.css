@@ -1,0 +1,208 @@
+/* ==========================================================
+   نشمي كابتن — مكوّنات خاصة بتطبيق الكابتن
+   تعتمد على نفس tokens.css و app.css حتى تبقى الهوية واحدة.
+   مصمم للاستخدام أثناء القيادة: أزرار كبيرة، أرقام واضحة، قراءة بنظرة.
+   ========================================================== */
+
+.cap-badge {
+  margin-top: 4px; padding: 5px 14px; border-radius: var(--r-pill);
+  background: var(--map-ink); color: var(--map-paper);
+  font: 800 13px/1 var(--font); letter-spacing: .02em;
+}
+
+/* ------------------------- الشريط العلوي ------------------------- */
+.cap-top {
+  position: absolute; inset-inline: 0; top: 0; z-index: 420;
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: calc(var(--safe-t) + var(--s-4)) var(--s-4) 0; pointer-events: none;
+}
+.cap-top > * { pointer-events: auto; }
+.earn-pill {
+  margin-inline: auto; display: inline-flex; align-items: baseline; gap: 6px;
+  background: var(--map-ink); color: var(--map-paper);
+  padding: 10px 18px; border-radius: var(--r-pill); box-shadow: var(--shadow-md);
+  font-weight: 800; font-size: 20px; font-variant-numeric: tabular-nums;
+}
+.earn-pill small { font-size: 12px; font-weight: 700; opacity: .7; }
+.wallet-warn {
+  position: absolute; inset-inline: var(--s-4); top: calc(var(--safe-t) + 74px); z-index: 419;
+  display: flex; align-items: center; gap: var(--s-3);
+  background: var(--danger-500); color: #fff; border-radius: var(--r-md);
+  padding: var(--s-3) var(--s-4); font-weight: 700; font-size: var(--fs-sm); box-shadow: var(--shadow-md);
+}
+.wallet-warn button { margin-inline-start: auto; background: #fff; color: var(--danger-500); border-radius: var(--r-pill); padding: 6px 12px; font-weight: 800; font-size: 13px; }
+
+/* ------------------------- زر الاتصال الكبير ------------------------- */
+.go-wrap { display: grid; place-items: center; margin: 0 auto 14px; }
+.go-btn {
+  width: 92px; height: 92px; border-radius: 50%;
+  background: var(--brand-600); color: #fff;
+  display: grid; place-items: center; font: 800 20px/1 var(--font);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--brand-600) 22%, transparent), var(--shadow-brand);
+  transition: transform var(--dur-fast) var(--ease);
+}
+.go-btn:active { transform: scale(.94); }
+.go-btn:disabled { opacity: .5; }
+
+/* حالة «متصل» */
+.online-row { display: flex; align-items: center; gap: var(--s-3); }
+.online-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--success-500); position: relative; flex: none; }
+.online-dot::after {
+  content: ""; position: absolute; inset: -6px; border-radius: 50%;
+  border: 2px solid var(--success-500); animation: dot-ping 1.8s ease-out infinite;
+}
+@keyframes dot-ping { from { transform: scale(.5); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+.scan-bar { height: 3px; border-radius: 3px; background: var(--surface-3); overflow: hidden; margin: var(--s-4) 0; }
+.scan-bar i { display: block; width: 35%; height: 100%; background: var(--success-500); border-radius: 3px; animation: scan 1.6s var(--ease) infinite; }
+@keyframes scan { from { transform: translateX(120%); } to { transform: translateX(-300%); } }
+.stop-btn {
+  width: 56px; height: 56px; border-radius: 50%; flex: none;
+  background: var(--surface-2); color: var(--danger-500); display: grid; place-items: center;
+}
+
+/* ------------------------- الهدف اليومي ------------------------- */
+.goal { display: flex; align-items: center; gap: var(--s-3); }
+.goal__bar { flex: 1; height: 8px; border-radius: 8px; background: var(--surface-3); overflow: hidden; }
+.goal__bar i { display: block; height: 100%; background: var(--success-500); border-radius: 8px; transition: width .6s var(--ease); }
+
+.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
+.stat {
+  background: var(--surface-2); border-radius: var(--r-md); padding: var(--s-3);
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.stat b { font-size: 18px; font-variant-numeric: tabular-nums; direction: ltr; text-align: start; }
+.stat span { font-size: var(--fs-xs); color: var(--text-3); }
+
+/* ------------------------- عرض الرحلة (الطلب الجديد) ------------------------- */
+.offer-host {
+  position: absolute; inset: 0; z-index: 850; display: flex; flex-direction: column; justify-content: flex-end;
+  background: linear-gradient(to bottom, transparent 20%, var(--overlay));
+  animation: fade .2s;
+}
+.offer {
+  background: var(--surface); border-radius: var(--r-2xl) var(--r-2xl) 0 0;
+  padding: var(--s-5) var(--s-5) calc(var(--s-5) + var(--safe-b));
+  box-shadow: var(--shadow-lg); animation: sheet-up .3s var(--ease);
+}
+.offer__head { display: flex; align-items: center; gap: var(--s-4); margin-bottom: var(--s-4); }
+.ring { position: relative; width: 64px; height: 64px; flex: none; }
+.ring svg { transform: rotate(-90deg); }
+.ring b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.offer__net { font-size: 34px; font-weight: 900; line-height: 1.1; font-variant-numeric: tabular-nums; direction: ltr; text-align: start; }
+.offer__net small { font-size: 15px; font-weight: 700; color: var(--text-2); }
+.offer__meta { font-size: var(--fs-sm); color: var(--text-2); }
+.offer__legs { display: grid; gap: var(--s-3); margin: var(--s-4) 0; padding: var(--s-4); background: var(--surface-2); border-radius: var(--r-lg); }
+.leg { display: flex; gap: var(--s-3); align-items: flex-start; }
+.leg__mark { width: 12px; height: 12px; margin-top: 6px; background: var(--map-ink); flex: none; border-radius: 50%; }
+.leg__mark--dest { border-radius: 2px; }
+.leg__body { min-width: 0; flex: 1; }
+.leg__title { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.leg__sub { font-size: var(--fs-sm); color: var(--text-3); }
+.offer__actions { display: grid; grid-template-columns: 1fr 2.2fr; gap: var(--s-3); }
+.btn--accept { background: var(--success-500); color: #fff; font-size: 18px; min-height: 58px; }
+.btn--reject { background: var(--surface-2); color: var(--text-2); min-height: 58px; }
+
+/* ------------------------- الرحلة ------------------------- */
+.nav-banner {
+  position: absolute; inset-inline: var(--s-4); top: calc(var(--safe-t) + var(--s-4)); z-index: 420;
+  display: flex; align-items: center; gap: var(--s-3);
+  background: var(--map-ink); color: var(--map-paper);
+  border-radius: var(--r-lg); padding: var(--s-3) var(--s-4); box-shadow: var(--shadow-md);
+}
+.nav-banner__body { flex: 1; min-width: 0; }
+.nav-banner__label { font-size: var(--fs-xs); opacity: .7; }
+.nav-banner__addr { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-banner__go {
+  flex: none; display: flex; align-items: center; gap: 6px;
+  background: var(--map-paper); color: var(--map-ink); border-radius: var(--r-pill);
+  padding: 9px 14px; font-weight: 800; font-size: 14px;
+}
+.nav-banner__back { color: var(--map-paper); display: flex; flex: none; }
+
+.cust { display: flex; align-items: center; gap: var(--s-3); }
+.cust__name { font-weight: 800; font-size: 18px; }
+.round-btn {
+  width: 48px; height: 48px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; background: var(--surface-2); color: var(--text);
+}
+.round-btn--call { background: var(--success-100); color: var(--success-500); }
+
+.wait {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s-3);
+  padding: var(--s-4); border-radius: var(--r-lg); margin: var(--s-4) 0;
+  background: var(--success-100); color: var(--success-500);
+}
+.wait--paid { background: var(--warning-100); color: var(--warning-500); }
+.wait b { font-size: 26px; font-variant-numeric: tabular-nums; direction: ltr; }
+.wait span { font-weight: 700; font-size: var(--fs-sm); }
+
+.near-hint {
+  display: flex; align-items: center; gap: var(--s-2); justify-content: center;
+  color: var(--success-500); font-weight: 800; font-size: var(--fs-sm); margin-bottom: var(--s-3);
+}
+
+/* ------------------------- اسحب للتأكيد ------------------------- */
+.swipe {
+  position: relative; height: 62px; border-radius: var(--r-pill);
+  background: var(--brand-600); color: #fff; overflow: hidden; user-select: none; touch-action: none;
+}
+.swipe--green { background: var(--success-500); }
+.swipe__label {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-weight: 800; font-size: 17px; pointer-events: none; padding-inline: 70px;
+}
+.swipe__thumb {
+  position: absolute; top: 5px; inset-inline-start: 5px; width: 52px; height: 52px; border-radius: 50%;
+  background: #fff; color: var(--brand-600); display: grid; place-items: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.2); cursor: grab; touch-action: none;
+}
+.swipe--green .swipe__thumb { color: var(--success-500); }
+.swipe__thumb:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.swipe.is-done .swipe__label { opacity: .6; }
+
+/* ------------------------- ملخص الرحلة ------------------------- */
+.collect {
+  text-align: center; padding: var(--s-6) var(--s-4); border-radius: var(--r-xl);
+  background: var(--map-ink); color: var(--map-paper); margin-bottom: var(--s-5);
+}
+.collect__label { font-weight: 700; opacity: .75; }
+.collect__amount { font-size: 48px; font-weight: 900; font-variant-numeric: tabular-nums; direction: ltr; line-height: 1.2; }
+.breakdown { display: grid; gap: var(--s-2); }
+.breakdown__row { display: flex; justify-content: space-between; gap: var(--s-3); font-size: 15px; }
+.breakdown__row b { font-variant-numeric: tabular-nums; direction: ltr; }
+.breakdown__row--total { border-top: 1px solid var(--border); padding-top: var(--s-3); margin-top: var(--s-1); font-size: 17px; font-weight: 800; }
+.breakdown__row--total b { color: var(--success-500); }
+
+/* ------------------------- المحفظة والأرباح ------------------------- */
+.big-balance { font-size: 40px; font-weight: 900; font-variant-numeric: tabular-nums; direction: ltr; text-align: start; }
+.big-balance.neg { color: var(--danger-500); }
+.amt-pos { color: var(--success-500); font-weight: 800; direction: ltr; font-variant-numeric: tabular-nums; }
+.amt-neg { color: var(--danger-500); font-weight: 800; direction: ltr; font-variant-numeric: tabular-nums; }
+.cliq {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s-3);
+  background: var(--surface-2); border: 1.5px dashed var(--border-strong); border-radius: var(--r-md);
+  padding: var(--s-3) var(--s-4); margin: var(--s-3) 0;
+}
+.cliq b { font-size: 18px; direction: ltr; }
+.proof {
+  display: grid; place-items: center; gap: var(--s-2); text-align: center;
+  border: 1.5px dashed var(--border-strong); border-radius: var(--r-lg); padding: var(--s-5);
+  color: var(--text-3); cursor: pointer; width: 100%;
+}
+.proof img { max-height: 160px; border-radius: var(--r-md); }
+
+.doc-row { display: flex; align-items: center; gap: var(--s-3); }
+
+.reason-list { display: grid; gap: var(--s-2); margin-bottom: var(--s-4); }
+.reason-list button {
+  text-align: start; padding: var(--s-4); border-radius: var(--r-md); background: var(--surface-2); font-weight: 700;
+}
+.reason-list button.on { background: var(--brand-100); color: var(--brand-700); }
+
+.chips-wrap { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.chips-wrap .chip { cursor: pointer; }
+.chips-wrap .chip.on { background: var(--map-ink); color: var(--map-paper); }
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-bar i { transform: none; width: 100%; opacity: .5; }
+}
