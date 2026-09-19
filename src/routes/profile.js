@@ -1,12 +1,10 @@
 'use strict';
-const fs = require('fs');
-const path = require('path');
 const db = require('../db');
-const config = require('../config');
+const files = require('../services/files');
 const auth = require('../services/auth');
 const { parseJson, ok } = require('../lib/http');
 const { str } = require('../lib/validate');
-const { uuid, nowIso } = require('../lib/ids');
+const { nowIso } = require('../lib/ids');
 const { E } = require('../lib/errors');
 
 async function me(req, res, ctx) {
@@ -47,39 +45,25 @@ async function update(req, res, ctx) {
 }
 
 const MAX_PHOTO_BYTES = 800 * 1024;
-const TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 
-/** الصورة تصل كـ data URL بعد تصغيرها في المتصفح (256×256) — لا حاجة لمعالجة صور على الخادم */
+/** معرّف الملف من رابط الصورة /media/<id> */
+const mediaId = (url) => (url && url.startsWith('/media/') ? url.slice(7) : null);
+
+/** الصورة تصل كـ data URL بعد تصغيرها في المتصفح، وتُحفظ بقاعدة البيانات (ما بتضيع عند إعادة تشغيل السيرفر) */
 async function uploadPhoto(req, res, ctx) {
   const body = await parseJson(req);
-  const dataUrl = String(body.dataUrl || '');
-  const m = /^data:([\w/+-]+);base64,(.+)$/.exec(dataUrl);
-  if (!m) throw E.UPLOAD_INVALID_TYPE();
-  const ext = TYPES[m[1]];
-  if (!ext) throw E.UPLOAD_INVALID_TYPE();
-  const buf = Buffer.from(m[2], 'base64');
-  if (buf.length > MAX_PHOTO_BYTES) throw E.UPLOAD_TOO_LARGE();
-
-  fs.mkdirSync(config.uploadsDir, { recursive: true });
-  const name = `${ctx.user.id}-${uuid().slice(0, 8)}.${ext}`;
-  fs.writeFileSync(path.join(config.uploadsDir, name), buf);
-
-  const old = ctx.user.photo_url;
-  const url = `/uploads/${name}`;
-  await db.query('UPDATE users SET photo_url = $1, updated_at = $2 WHERE id = $3', [url, nowIso(), ctx.user.id]);
-  if (old && old.startsWith('/uploads/')) {
-    try { fs.unlinkSync(path.join(config.uploadsDir, path.basename(old))); } catch {}
-  }
+  const id = await files.save(body.dataUrl, { ownerId: ctx.user.id, kind: 'avatar', isPrivate: false, maxBytes: MAX_PHOTO_BYTES });
+  const old = mediaId(ctx.user.photo_url);
+  await db.query('UPDATE users SET photo_url = $1, updated_at = $2 WHERE id = $3', [`/media/${id}`, nowIso(), ctx.user.id]);
+  await files.remove(old);
   const user = await db.one('SELECT * FROM users WHERE id = $1', [ctx.user.id]);
   return ok(res, { user: auth.publicUser(user) });
 }
 
 async function removePhoto(req, res, ctx) {
-  const old = ctx.user.photo_url;
+  const old = mediaId(ctx.user.photo_url);
   await db.query('UPDATE users SET photo_url = NULL, updated_at = $1 WHERE id = $2', [nowIso(), ctx.user.id]);
-  if (old && old.startsWith('/uploads/')) {
-    try { fs.unlinkSync(path.join(config.uploadsDir, path.basename(old))); } catch {}
-  }
+  await files.remove(old);
   const user = await db.one('SELECT * FROM users WHERE id = $1', [ctx.user.id]);
   return ok(res, { user: auth.publicUser(user) });
 }
