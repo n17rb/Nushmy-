@@ -352,7 +352,7 @@ textarea.input { min-height: 96px; padding: var(--s-4) var(--s-5); border-radius
           mask-image: linear-gradient(to bottom, transparent 0, #000 22%);
   pointer-events: none;
 }
-:root[data-theme="dark"] .stage__castle { filter: invert(1) brightness(.62) contrast(1.1); opacity: .55; }
+:root[data-theme="dark"] .stage__castle { filter: grayscale(1) brightness(.5) contrast(1.15); opacity: .55; }
 
 /* حقل الرقم على شاشة الترحيب — بنفس شكل الهوية */
 .stage__field {
