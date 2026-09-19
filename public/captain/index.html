@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>نشمي كابتن</title>
+<meta name="description" content="نشمي كابتن — استقبل رحلات في الكرك واربح أكثر">
+<meta name="theme-color" content="#0C0D10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="نشمي كابتن">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/captain/manifest.webmanifest">
+<link rel="icon" href="/img/logo-mark.png">
+<link rel="apple-touch-icon" href="/img/logo-mark.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin>
+<link rel="preload" href="/img/castle.webp" as="image">
+
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/app.css">
+<link rel="stylesheet" href="/css/captain.css">
+</head>
+<body class="captain-app">
+  <div id="app">
+    <div class="splash stage" id="splash" aria-label="نشمي كابتن">
+      <div class="stage__castle"></div>
+      <div class="stage__brand">
+        <img class="stage__mark" src="/img/logo-mark.png" alt="" width="124" height="124">
+        <img class="stage__word" src="/img/wordmark.png" alt="نشمي">
+        <span class="cap-badge">كابتن</span>
+      </div>
+    </div>
+    <div id="screens"></div>
+    <div class="toast-host" id="toasts"></div>
+    <div id="modal"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin defer></script>
+  <script src="/js/icons.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/map.js"></script>
+  <script src="/js/screens/auth.js"></script>
+  <script src="/js/captain/kit.js"></script>
+  <script src="/js/captain/screens.js"></script>
+  <script src="/js/captain/trip.js"></script>
+  <script src="/js/captain/app.js"></script>
+</body>
+</html>
