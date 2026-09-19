@@ -80,7 +80,33 @@ async function migrate() {
     const client = await pool.connect();
     try { await client.query(schema); } finally { client.release(); }
   }
+  // أعمدة أُضيفت بعد الإصدار الأول — تُضاف لقواعد البيانات القديمة بدون مسح أي بيانات
+  for (const [table, column, ddl] of COLUMN_MIGRATIONS) await ensureColumn(table, column, ddl);
 }
+
+const COLUMN_MIGRATIONS = [
+  ['trips', 'odometer_m', 'INTEGER NOT NULL DEFAULT 0'],
+  ['trips', 'accepted_at', 'TEXT'],
+  ['trips', 'waiting_fee_fils', 'INTEGER NOT NULL DEFAULT 0'],
+  ['captains', 'daily_goal_fils', 'INTEGER'],
+];
+
+async function ensureColumn(table, column, ddl) {
+  let exists;
+  if (driver === 'sqlite') {
+    exists = sqlite.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+  } else {
+    const r = await pool.query(
+      'SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2', [table, column]);
+    exists = r.rows.length > 0;
+  }
+  if (exists) return;
+  const sql = `ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`;
+  if (driver === 'sqlite') sqlite.exec(sql); else await pool.query(sql);
+}
+
+/** قفل الصف داخل المعاملة (PostgreSQL فقط — SQLite يقفل القاعدة كاملة أصلاً) */
+const forUpdate = () => (driver === 'pg' ? ' FOR UPDATE' : '');
 
 /* ----------------------------- queries ---------------------------- */
 async function query(sql, params = []) {
@@ -122,22 +148,28 @@ async function transaction(fn) {
       client.release();
     }
   }
-  // SQLite: المعاملات متزامنة والعمليات على نفس الاتصال
-  sqlite.exec('BEGIN IMMEDIATE');
-  try {
-    const tx = { query, one };
-    const out = await fn(tx);
-    sqlite.exec('COMMIT');
-    return out;
-  } catch (err) {
-    try { sqlite.exec('ROLLBACK'); } catch {}
-    throw err;
-  }
+  // SQLite: اتصال واحد، فنرتّب المعاملات بالدور حتى لا تتداخل
+  const run = async () => {
+    sqlite.exec('BEGIN IMMEDIATE');
+    try {
+      const tx = { query, one };
+      const out = await fn(tx);
+      sqlite.exec('COMMIT');
+      return out;
+    } catch (err) {
+      try { sqlite.exec('ROLLBACK'); } catch {}
+      throw err;
+    }
+  };
+  const next = txQueue.then(run, run);
+  txQueue = next.catch(() => {});
+  return next;
 }
+let txQueue = Promise.resolve();
 
 async function close() {
   if (driver === 'pg' && pool) await pool.end();
   if (driver === 'sqlite' && sqlite) sqlite.close();
 }
 
-module.exports = { init, query, one, transaction, close, get driver() { return driver; } };
+module.exports = { init, query, one, transaction, close, forUpdate, get driver() { return driver; } };
