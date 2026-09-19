@@ -137,7 +137,7 @@ window.Screens = window.Screens || {};
 
     node.querySelector('[data-back]').onclick = () => { stop(); App.go('home'); };
     const stop = () => { if (poll) clearInterval(poll); poll = null; };
-    node.addEventListener('DOMNodeRemoved', stop, { once: true });
+    UI.onLeave(node, stop);
 
     setTimeout(async () => {
       map = MapKit.create(node.querySelector('#tlMap'), { center: current.pickup, zoom: 15 });
@@ -176,7 +176,8 @@ window.Screens = window.Screens || {};
     /** سيارة الكابتن الحقيقية — تتحرك بنعومة وتدور حسب اتجاهها */
     function placeCaptain() {
       const loc = current.captain && current.captain.location;
-      if (!map || !loc) return;
+      if (!map) return;
+      if (!loc) { if (captainMarker) { captainMarker.remove(); captainMarker = null; } return; }
       if (captainMarker) captainMarker.glideTo(loc, loc.heading);
       else captainMarker = MapKit.carMarker(map, loc, loc.heading);
     }
@@ -191,6 +192,11 @@ window.Screens = window.Screens || {};
         current = res.trip;
         placeCaptain();
         syncSearchPulse();
+        const captainStates = ['DRIVER_ASSIGNED', 'DRIVER_ACCEPTED', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED'];
+        if (captainStates.includes(prev) && current.status === 'SEARCHING') {
+          toast('الكابتن اعتذر — نبحث لك عن كابتن ثاني الآن');
+        }
+        if (prev !== 'DRIVER_ARRIVED' && current.status === 'DRIVER_ARRIVED' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
         if (current.status !== prev) render(current);
         else updateTimer();
         if (current.isFinal) {
@@ -278,6 +284,8 @@ window.Screens = window.Screens || {};
           </div>
           ${c.vehicle ? `<span class="chip num">${esc(c.vehicle.plate)}</span>` : ''}
         </div>
+        ${t.status === 'DRIVER_ARRIVED' ? `<div class="card" style="background:var(--success-100);border-color:transparent;margin-bottom:var(--s-4);padding:var(--s-3) var(--s-4)">
+          <div class="row sm bold" style="color:var(--success-500)">${Icon('checkCircle', 18)} الكابتن وصل وبانتظارك — اطلع لعنده</div></div>` : ''}
         <div class="row" style="gap:var(--s-2);margin-bottom:var(--s-4)">
           ${c.phone ? `<a class="btn btn--ghost" href="tel:${esc(c.phone)}">${Icon('phone', 18)} اتصال</a>` : ''}
           <button class="btn btn--ghost" data-share>${Icon('share', 18)} شارك الرحلة</button>
