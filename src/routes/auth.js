@@ -28,6 +28,7 @@ async function requestOtp(req, res) {
     expiresInSec: result.expiresInSec,
     resendAfterSec: result.resendAfterSec,
     devCode: result.devCode,
+    notice: result.notice,
   });
 }
 
@@ -39,7 +40,9 @@ async function verifyOtp(req, res) {
   await otp.verifyCode({ phone, code: body.code });
 
   const defaultCity = await db.one('SELECT id FROM cities WHERE is_active = 1 ORDER BY created_at', []);
-  const { user, isNew } = await auth.findOrCreateUser(phone, defaultCity ? defaultCity.id : null);
+  const found = await auth.findOrCreateUser(phone, defaultCity ? defaultCity.id : null);
+  const isNew = found.isNew;
+  const user = await auth.promoteOwner(found.user);
   if (user.status !== 'ACTIVE') throw E.ACCOUNT_SUSPENDED();
 
   const tokens = await auth.createSession(user, { ip, userAgent: req.headers['user-agent'] });
