@@ -47,12 +47,24 @@ module.exports = {
     // فترة المعاينة فقط: يسمح بعرض رمز التحقق على الشاشة حتى على الخادم الحقيقي.
     // احذفه (أو اجعله 0) قبل الإطلاق للناس.
     showDevCode: process.env.NODE_ENV !== 'production' || process.env.OTP_DEV_SHOW === '1',
+    // واتساب (WhatsApp Cloud API من Meta) — SMS_PROVIDER=whatsapp
+    whatsapp: {
+      token: process.env.WHATSAPP_TOKEN || '',
+      phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
+      template: process.env.WHATSAPP_TEMPLATE || 'nashmi_otp',
+      lang: process.env.WHATSAPP_TEMPLATE_LANG || 'ar',
+      apiVersion: process.env.WHATSAPP_API_VERSION || 'v21.0',
+      // قوالب «المصادقة» فيها زر «نسخ الرمز» ولازم يوصله الرمز كمان. 0 = قالب بدون زر
+      copyButton: process.env.WHATSAPP_COPY_BUTTON !== '0',
+    },
     twilio: {
       sid: process.env.TWILIO_ACCOUNT_SID || '',
       token: process.env.TWILIO_AUTH_TOKEN || '',
       from: process.env.TWILIO_FROM || '',
     },
   },
+  // أرقام «المالك»: أي رقم هنا يصير مدير عام (SUPER_ADMIN) تلقائياً عند الدخول
+  adminPhones: (process.env.ADMIN_PHONES || '').split(',').map((s) => s.trim()).filter(Boolean),
   captain: {
     // فترة المعاينة: يُقبل الكابتن تلقائياً بدون مراجعة. في الإنتاج لا يعمل إلا إذا فُعّل صراحة.
     autoApprove: process.env.CAPTAIN_AUTO_APPROVE === '1' || (process.env.NODE_ENV !== 'production' && process.env.CAPTAIN_AUTO_APPROVE !== '0'),
