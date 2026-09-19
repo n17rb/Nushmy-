@@ -22,6 +22,8 @@ const placesRoutes = require('./routes/places');
 const tripRoutes = require('./routes/trips');
 const captainRoutes = require('./routes/captains');
 const cap = require('./routes/captain');
+const adm = require('./routes/admin');
+const files = require('./services/files');
 
 /* ----------------------------- الموجِّه ----------------------------- */
 const routes = [];
@@ -64,6 +66,36 @@ add('POST', '/api/captain/trips/:id/rate',     cap.rateCustomer);
 add('GET',  '/api/captain/earnings',           cap.earnings);
 add('GET',  '/api/captain/wallet',             cap.walletView);
 add('POST', '/api/captain/wallet/deposits',    cap.requestDeposit);
+
+// ----- لوحة الإدارة -----
+add('GET',  '/api/admin/me',                     adm.me);
+add('GET',  '/api/admin/dashboard',              adm.dashboard);
+add('GET',  '/api/admin/live',                   adm.live);
+add('GET',  '/api/admin/trips',                  adm.trips);
+add('GET',  '/api/admin/trips/:id',              adm.tripDetail);
+add('POST', '/api/admin/trips/:id/cancel',       adm.cancelTrip);
+add('GET',  '/api/admin/captains',               adm.captains);
+add('GET',  '/api/admin/captains/:id',           adm.captainDetail);
+add('POST', '/api/admin/captains/:id/status',    adm.captainStatus);
+add('POST', '/api/admin/captains/:id/offline',   adm.captainOffline);
+add('POST', '/api/admin/captains/:id/wallet',    adm.walletAdjust);
+add('POST', '/api/admin/documents/:id',          adm.documentReview);
+add('GET',  '/api/admin/files/:id',              adm.fileView);
+add('GET',  '/api/admin/deposits',               adm.deposits);
+add('POST', '/api/admin/deposits/:id/approve',   adm.depositApprove);
+add('POST', '/api/admin/deposits/:id/reject',    adm.depositReject);
+add('GET',  '/api/admin/customers',              adm.customers);
+add('GET',  '/api/admin/customers/:id',          adm.customerDetail);
+add('POST', '/api/admin/customers/:id/status',   adm.customerStatus);
+add('GET',  '/api/admin/pricing',                adm.pricingList);
+add('PATCH','/api/admin/pricing/:id',            adm.pricingUpdate);
+add('GET',  '/api/admin/settings',               adm.settingsList);
+add('PATCH','/api/admin/settings/:key',          adm.settingUpdate);
+add('PATCH','/api/admin/cities/:id',             adm.cityUpdate);
+add('GET',  '/api/admin/admins',                 adm.admins);
+add('POST', '/api/admin/admins',                 adm.adminAdd);
+add('DELETE','/api/admin/admins/:id',            adm.adminRemove);
+add('GET',  '/api/admin/audit',                  adm.auditList);
 add('POST', '/api/trips/estimate',   tripRoutes.estimate);
 add('POST', '/api/trips',            tripRoutes.create);
 add('GET',  '/api/trips/active',     tripRoutes.active);
@@ -123,11 +155,13 @@ function serveStatic(req, res, pathname) {
   const target = path.normalize(path.join(PUBLIC_DIR, rel));
   if (!target.startsWith(PUBLIC_DIR)) return false;
   if (serveFile(res, target)) return true;
-  // تطبيق الكابتن له صفحته الخاصة تحت /captain
-  if (rel === '/captain' || rel.startsWith('/captain/')) {
-    if (rel === '/captain') { res.writeHead(301, { Location: '/captain/' }); res.end(); return true; }
-    if (!path.extname(rel)) return serveFile(res, path.join(PUBLIC_DIR, 'captain', 'index.html'));
-    return false;
+  // تطبيق الكابتن ولوحة الإدارة لكل واحد صفحته الخاصة
+  for (const app of ['captain', 'admin']) {
+    if (rel === '/' + app || rel.startsWith('/' + app + '/')) {
+      if (rel === '/' + app) { res.writeHead(301, { Location: '/' + app + '/' }); res.end(); return true; }
+      if (!path.extname(rel)) return serveFile(res, path.join(PUBLIC_DIR, app, 'index.html'));
+      return false;
+    }
   }
   // تطبيق صفحة واحدة: أي مسار غير معروف يعيد index.html
   if (!rel.startsWith('/api') && !path.extname(rel)) return serveFile(res, path.join(PUBLIC_DIR, 'index.html'));
@@ -169,6 +203,13 @@ const server = http.createServer(async (req, res) => {
       await m.route.handler(req, res, ctx, m.params);
       log.debug('طلب', { method: req.method, path: pathname, ms: Date.now() - started });
       return;
+    }
+
+    // صور الحسابات العامة المحفوظة بقاعدة البيانات
+    if (pathname.startsWith('/media/')) {
+      const f = await files.get(pathname.slice(7));
+      if (f && !f.is_private) return files.send(res, f, { cacheSeconds: 31536000 });
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('غير موجود'); return;
     }
 
     if (serveStatic(req, res, pathname)) return;
