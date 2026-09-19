@@ -1,0 +1,173 @@
+'use strict';
+/**
+ * نشمي — الخادم.
+ * بدون مكتبات خارجية: node:http + node:sqlite (أو pg في الإنتاج).
+ */
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const config = require('./config');
+const db = require('./db');
+const log = require('./lib/log');
+const { fail, ok, clientIp } = require('./lib/http');
+const { E, AppError } = require('./lib/errors');
+const rate = require('./lib/rate-limit');
+const settings = require('./services/settings');
+const dispatch = require('./services/dispatch');
+const authService = require('./services/auth');
+
+const authRoutes = require('./routes/auth');
+const profileRoutes = require('./routes/profile');
+const placesRoutes = require('./routes/places');
+const tripRoutes = require('./routes/trips');
+const captainRoutes = require('./routes/captains');
+
+/* ----------------------------- الموجِّه ----------------------------- */
+const routes = [];
+const add = (method, pattern, handler, opts = {}) => routes.push({ method, pattern, handler, auth: opts.auth !== false });
+
+add('POST', '/api/auth/otp/request', authRoutes.requestOtp, { auth: false });
+add('POST', '/api/auth/otp/verify',  authRoutes.verifyOtp,  { auth: false });
+add('POST', '/api/auth/refresh',     authRoutes.refresh,    { auth: false });
+add('POST', '/api/auth/logout',      authRoutes.logout,     { auth: false });
+
+add('GET',  '/api/me',               profileRoutes.me);
+add('PATCH','/api/me',               profileRoutes.update);
+add('POST', '/api/me/photo',         profileRoutes.uploadPhoto);
+add('DELETE','/api/me/photo',        profileRoutes.removePhoto);
+
+add('GET',  '/api/places',           placesRoutes.list);
+add('POST', '/api/places',           placesRoutes.save);
+add('DELETE','/api/places/:id',      placesRoutes.remove);
+
+add('GET',  '/api/vehicle-types',    tripRoutes.vehicleTypes, { auth: false });
+add('GET',  '/api/captains/nearby',  captainRoutes.nearby);
+add('POST', '/api/trips/estimate',   tripRoutes.estimate);
+add('POST', '/api/trips',            tripRoutes.create);
+add('GET',  '/api/trips/active',     tripRoutes.active);
+add('GET',  '/api/trips/history',    tripRoutes.history);
+add('GET',  '/api/trips/:id',        tripRoutes.get);
+add('GET',  '/api/trips/:id/cancel-preview', tripRoutes.cancelPreview);
+add('POST', '/api/trips/:id/cancel', tripRoutes.cancel);
+add('POST', '/api/trips/:id/rate',   tripRoutes.rate);
+
+function match(method, pathname) {
+  for (const r of routes) {
+    if (r.method !== method) continue;
+    const rp = r.pattern.split('/'), pp = pathname.split('/');
+    if (rp.length !== pp.length) continue;
+    const params = {};
+    let hit = true;
+    for (let i = 0; i < rp.length; i++) {
+      if (rp[i].startsWith(':')) params[rp[i].slice(1)] = decodeURIComponent(pp[i]);
+      else if (rp[i] !== pp[i]) { hit = false; break; }
+    }
+    if (hit) return { route: r, params };
+  }
+  return null;
+}
+
+/* --------------------------- الملفات الثابتة --------------------------- */
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.map': 'application/json',
+};
+
+function serveFile(res, filePath, { immutable = false } = {}) {
+  let stat;
+  try { stat = fs.statSync(filePath); } catch { return false; }
+  if (!stat.isFile()) return false;
+  const ext = path.extname(filePath).toLowerCase();
+  res.writeHead(200, {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Content-Length': stat.size,
+    'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  fs.createReadStream(filePath).pipe(res);
+  return true;
+}
+
+function serveStatic(req, res, pathname) {
+  if (pathname.startsWith('/uploads/')) {
+    const name = path.basename(pathname);
+    return serveFile(res, path.join(config.uploadsDir, name), { immutable: true });
+  }
+  const rel = pathname === '/' ? '/index.html' : pathname;
+  const target = path.normalize(path.join(PUBLIC_DIR, rel));
+  if (!target.startsWith(PUBLIC_DIR)) return false;
+  if (serveFile(res, target)) return true;
+  // تطبيق صفحة واحدة: أي مسار غير معروف يعيد index.html
+  if (!rel.startsWith('/api') && !path.extname(rel)) return serveFile(res, path.join(PUBLIC_DIR, 'index.html'));
+  return false;
+}
+
+/* ------------------------------- الخادم ------------------------------- */
+const server = http.createServer(async (req, res) => {
+  const started = Date.now();
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = url.pathname;
+
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  try {
+    if (pathname === '/api/health') {
+      return ok(res, { status: 'up', driver: db.driver, env: config.NODE_ENV, time: new Date().toISOString() });
+    }
+    if (pathname === '/api/config') {
+      return ok(res, {
+        maps: { tilesUrl: config.maps.tilesUrl, tilesUrlDark: config.maps.tilesUrlDark, geocoderUrl: config.maps.geocoderUrl, routingUrl: config.maps.routingUrl },
+        smsProvider: config.sms.provider,
+        devMode: config.sms.provider === 'dev' && config.sms.showDevCode,
+        currency: 'JOD',
+      });
+    }
+
+    if (pathname.startsWith('/api/')) {
+      const ip = clientIp(req);
+      if (!rate.hit(`api:${ip}`, 600, 60).allowed) throw E.RATE_LIMITED();
+
+      const m = match(req.method, pathname);
+      if (!m) throw E.NOT_FOUND('المسار غير موجود');
+
+      const ctx = { ip, user: null };
+      if (m.route.auth) ctx.user = await authService.authenticate(req);
+
+      await m.route.handler(req, res, ctx, m.params);
+      log.debug('طلب', { method: req.method, path: pathname, ms: Date.now() - started });
+      return;
+    }
+
+    if (serveStatic(req, res, pathname)) return;
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('غير موجود');
+  } catch (err) {
+    if (res.headersSent) { try { res.end(); } catch {} return; }
+    return fail(res, err, { method: req.method, path: pathname });
+  }
+});
+
+async function main() {
+  const driver = await db.init();
+  await settings.ensureDefaults();
+  await require('./db/seed').run({ quiet: true });
+  dispatch.start();
+  server.listen(config.port, () => {
+    log.info('نشمي يعمل', { port: config.port, db: driver, env: config.NODE_ENV });
+    if (!config.isProd) log.info(`افتح المتصفح على  http://localhost:${config.port}`);
+  });
+}
+
+process.on('SIGTERM', async () => { dispatch.stop(); server.close(); await db.close(); process.exit(0); });
+process.on('SIGINT',  async () => { dispatch.stop(); server.close(); await db.close(); process.exit(0); });
+
+if (require.main === module) {
+  main().catch((e) => { log.error('فشل الإقلاع', { message: e.message, stack: e.stack }); process.exit(1); });
+}
+
+module.exports = { server, main, match };
