@@ -59,7 +59,7 @@ window.Screens = window.Screens || {};
       busy(btn, true, 'جاري الإرسال');
       try {
         const res = await API.requestOtp(phone);
-        show(Screens.otp({ phone: res.phone, display: input.value, resendAfterSec: res.resendAfterSec, devCode: res.devCode }));
+        show(Screens.otp({ phone: res.phone, display: input.value, resendAfterSec: res.resendAfterSec, devCode: res.devCode, channel: res.channel, notice: res.notice }));
       } catch (e) {
         err.textContent = e.message; err.classList.remove('hidden');
       } finally { busy(btn, false); }
@@ -70,7 +70,7 @@ window.Screens = window.Screens || {};
   };
 
   /* ----------------------------- رمز التحقق ----------------------------- */
-  Screens.otp = function otpScreen({ phone, display, resendAfterSec, devCode }) {
+  Screens.otp = function otpScreen({ phone, display, resendAfterSec, devCode, channel, notice }) {
     const node = el(`
       <section class="screen screen--scroll">
         <div class="topbar">
@@ -79,7 +79,7 @@ window.Screens = window.Screens || {};
         <div class="pad-x" style="padding-top:var(--s-6)">
           <h1 class="display">دخّل الرمز</h1>
           <p class="muted" style="font-size:17px;margin:var(--s-2) 0 var(--s-7)">
-            أرسلنا رمزاً من 4 أرقام إلى
+            ${channel === 'whatsapp' ? `أرسلنا رمزاً من 4 أرقام على <b style="color:#1FA855">واتساب</b> إلى` : 'أرسلنا رمزاً من 4 أرقام إلى'}
             <span class="num bold" style="color:var(--text)">+962 ${esc(display || '')}</span>
           </p>
           <div class="otp" data-otp>
@@ -91,7 +91,7 @@ window.Screens = window.Screens || {};
                 <span style="color:var(--warning-500)">${Icon('alert', 20)}</span>
                 <div class="sm">
                   <b>وضع التطوير:</b> الرمز هو <span class="num bold" style="font-size:17px">${esc(devCode)}</span>.
-                  عند ربط مزوّد رسائل SMS سيصل الرمز على الهاتف ولن يظهر هنا.
+                  ${notice ? `ما قدرنا نبعته على واتساب: ${esc(notice)}.` : 'لما يشتغل واتساب بيوصل الرمز هناك وما بيظهر هون.'}
                 </div>
               </div>
             </div>` : ''}
