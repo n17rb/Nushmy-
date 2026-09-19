@@ -14,13 +14,21 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true
-      - key: SMS_PROVIDER
+      - key: SMS_PROVIDER   # dev أو whatsapp
         value: dev
+      - key: WHATSAPP_TOKEN            # سرّي — من Meta، حطه من لوحة Render
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_TEMPLATE
+        value: nashmi_otp
       - key: OTP_DEV_SHOW   # للمعاينة فقط — احذفه قبل الإطلاق
         value: "1"
       - key: CAPTAIN_AUTO_APPROVE   # للمعاينة فقط — احذفه بعد تجهيز لوحة الإدارة
         value: "1"
       - key: SERVICE_ALL_JORDAN     # 1 = كل الأردن مؤقتاً، احذفه لترجع للكرك فقط
         value: "1"
+      - key: ADMIN_PHONES           # رقمك — يدخل لوحة الإدارة /admin كمدير عام
+        sync: false
       - key: DATABASE_URL
         sync: false   # ضع رابط Neon من لوحة Render
