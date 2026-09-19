@@ -53,6 +53,10 @@ module.exports = {
       from: process.env.TWILIO_FROM || '',
     },
   },
+  captain: {
+    // فترة المعاينة: يُقبل الكابتن تلقائياً بدون مراجعة. في الإنتاج لا يعمل إلا إذا فُعّل صراحة.
+    autoApprove: process.env.CAPTAIN_AUTO_APPROVE === '1' || (process.env.NODE_ENV !== 'production' && process.env.CAPTAIN_AUTO_APPROVE !== '0'),
+  },
   otp: {
     length: 4,
     ttlSec: 120,
