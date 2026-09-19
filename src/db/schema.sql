@@ -170,6 +170,17 @@ CREATE TABLE IF NOT EXISTS vehicles (
 );
 CREATE INDEX IF NOT EXISTS idx_vehicles_captain ON vehicles(captain_id);
 
+-- وثائق الكابتن (رخصة، هوية، ترخيص مركبة) — لا تُعرض للعامة
+CREATE TABLE IF NOT EXISTS captain_documents (
+  id          TEXT PRIMARY KEY,
+  captain_id  TEXT NOT NULL REFERENCES captains(id),
+  kind        TEXT NOT NULL,
+  file_name   TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'PENDING',
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_docs_captain ON captain_documents(captain_id, kind);
+
 CREATE TABLE IF NOT EXISTS driver_locations (
   captain_id  TEXT PRIMARY KEY REFERENCES captains(id),
   lat         REAL NOT NULL,
@@ -251,7 +262,7 @@ CREATE TABLE IF NOT EXISTS trip_offers (
   score        REAL NOT NULL DEFAULT 0,
   eta_s        INTEGER,
   distance_m   INTEGER,
-  status       TEXT NOT NULL DEFAULT 'SENT',
+  status       TEXT NOT NULL DEFAULT 'SENT',  -- SENT | ACCEPTED | REJECTED | EXPIRED | SUPERSEDED
   sent_at      TEXT NOT NULL,
   responded_at TEXT,
   expires_at   TEXT NOT NULL
