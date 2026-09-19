@@ -20,6 +20,10 @@ const DEFAULTS = {
   'cancel.free_window_sec':      { value: '120',  type: 'int',    label: 'مدة الإلغاء المجاني بعد قبول الكابتن (ثانية)' },
   'trip.max_distance_km':        { value: '150',  type: 'int',    label: 'أقصى مسافة رحلة (كم)' },
   'otp.dev_mode_visible':        { value: '1',    type: 'bool',   label: 'إظهار رمز التحقق على الشاشة (وضع التطوير فقط)' },
+  'captain.arrive_max_distance_m': { value: '400', type: 'int',    label: 'أقصى بعد عن نقطة الانطلاق للضغط على «وصلت» (متر)' },
+  'wallet.min_balance_fils':     { value: '-3000', type: 'int',    label: 'أدنى رصيد مسموح للكابتن ليستقبل رحلات (فلس، سالب = دين مسموح)' },
+  'wallet.cliq_alias':           { value: '',     type: 'string', label: 'اسم CliQ لاستقبال إيداعات الكباتن' },
+  'fare.recalc_threshold_bp':    { value: '12500', type: 'int',   label: 'إعادة حساب الأجرة إذا زادت المسافة الفعلية عن التقدير بهذه النسبة (12500 = 125%)' },
 };
 
 async function ensureDefaults() {
