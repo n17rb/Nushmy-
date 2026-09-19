@@ -18,5 +18,7 @@ services:
         value: dev
       - key: OTP_DEV_SHOW   # للمعاينة فقط — احذفه قبل الإطلاق
         value: "1"
+      - key: CAPTAIN_AUTO_APPROVE   # للمعاينة فقط — احذفه بعد تجهيز لوحة الإدارة
+        value: "1"
       - key: DATABASE_URL
         sync: false   # ضع رابط Neon من لوحة Render
