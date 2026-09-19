@@ -13,14 +13,22 @@ window.UI = (function () {
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  /** عرض شاشة جديدة مكان الحالية */
+  /** عرض شاشة جديدة مكان الحالية — وتنظيف مؤقتات الشاشة القديمة */
   function show(node) {
     const h = host();
     const old = h.firstElementChild;
-    if (old) old.remove();
+    if (old) {
+      for (const fn of old._leave || []) { try { fn(); } catch {} }
+      old.remove();
+    }
     h.appendChild(node);
     node.scrollTop = 0;
     return node;
+  }
+
+  /** تسجيل دالة تُنفَّذ عند مغادرة الشاشة (إيقاف التحديث الدوري وغيره) */
+  function onLeave(node, fn) {
+    (node._leave = node._leave || []).push(fn);
   }
 
   function toast(message, kind = '') {
@@ -153,5 +161,5 @@ window.UI = (function () {
   style.textContent = '@keyframes sp{to{transform:rotate(360deg)}}';
   document.head.appendChild(style);
 
-  return { el, esc, show, toast, confirm, sheet, applyTheme, setTheme, getTheme, dateText, initials, avatar, resizeImage, busy };
+  return { el, esc, show, onLeave, toast, confirm, sheet, applyTheme, setTheme, getTheme, dateText, initials, avatar, resizeImage, busy };
 })();
