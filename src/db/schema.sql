@@ -170,6 +170,20 @@ CREATE TABLE IF NOT EXISTS vehicles (
 );
 CREATE INDEX IF NOT EXISTS idx_vehicles_captain ON vehicles(captain_id);
 
+-- الملفات (صور الحسابات، الوثائق، إشعارات التحويل) محفوظة بقاعدة البيانات
+-- لأن قرص Render المجاني يُمسح عند كل إعادة تشغيل
+CREATE TABLE IF NOT EXISTS files (
+  id            TEXT PRIMARY KEY,
+  owner_user_id TEXT REFERENCES users(id),
+  kind          TEXT NOT NULL,
+  mime          TEXT NOT NULL,
+  size_bytes    INTEGER NOT NULL,
+  data_base64   TEXT NOT NULL,
+  is_private    INTEGER NOT NULL DEFAULT 1,
+  created_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_user_id);
+
 -- وثائق الكابتن (رخصة، هوية، ترخيص مركبة) — لا تُعرض للعامة
 CREATE TABLE IF NOT EXISTS captain_documents (
   id          TEXT PRIMARY KEY,
