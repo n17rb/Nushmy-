@@ -11,6 +11,7 @@ const log = require('../lib/log');
 const { E, AppError } = require('../lib/errors');
 const { uuid, nowIso } = require('../lib/ids');
 const { hashSecret, verifySecret } = require('../lib/hash');
+const authmode = require('./authmode');
 
 function generateCode(len) {
   let out = '';
@@ -66,6 +67,36 @@ const providers = {
     return { sent: true, channel: 'whatsapp' };
   },
 
+  /**
+   * SMS من تلفون أندرويد برقمك (تطبيق SMS Gateway for Android، الخادم السحابي المجاني).
+   * الرسالة قصيرة عشان تضل رسالة وحدة (العربي 70 حرف للرسالة).
+   */
+  async android({ phone, code }) {
+    const a = config.sms.android;
+    if (!a.username || !a.password) {
+      log.error('SMS أندرويد غير مهيّأ');
+      throw new AppError('OTP_SEND_FAILED', 'إرسال الرسائل النصية مش مجهّز بعد. جرّب واتساب', 503);
+    }
+    let res;
+    try {
+      res = await fetch(a.url, {
+        method: 'POST',
+        headers: { Authorization: 'Basic ' + Buffer.from(`${a.username}:${a.password}`).toString('base64'), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ textMessage: { text: `رمز نشمي: ${code}\nلا تعطيه لحدا.` }, phoneNumbers: [phone] }),
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch (e) {
+      log.error('تعذّر الاتصال بخادم رسائل أندرويد', { error: e.message });
+      throw new AppError('OTP_SEND_FAILED', 'تعذّر إرسال الرسالة حالياً. جرّب بعد شوي', 502);
+    }
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      log.error('رفض خادم رسائل أندرويد', { status: res.status, body: t.slice(0, 200) });
+      throw new AppError('OTP_SEND_FAILED', res.status === 401 ? 'بيانات تلفون الرسائل غلط — راجع SMSGATE_USERNAME و SMSGATE_PASSWORD' : 'تعذّر إرسال الرسالة حالياً. جرّب بعد شوي', 502);
+    }
+    return { sent: true, channel: 'sms' };
+  },
+
   async twilio({ phone, code }) {
     const { sid, token, from } = config.sms.twilio;
     if (!sid || !token || !from) {
@@ -103,7 +134,7 @@ function whatsappErrorText(code) {
   }
 }
 
-async function issue({ phone, ip, purpose = 'login' }) {
+async function issue({ phone, ip, purpose = 'login', providerName }) {
   const now = Date.now();
   // منع الإرسال المتكرر السريع
   const last = await db.one(
@@ -131,15 +162,17 @@ async function issue({ phone, ip, purpose = 'login' }) {
     [otpId, phone, hashSecret(code), purpose, new Date(now + config.otp.ttlSec * 1000).toISOString(), ip || null, nowIso()]
   );
 
-  const provider = providers[config.sms.provider] || providers.dev;
+  const pname = providerName || await authmode.mode();
+  const provider = providers[pname] || providers.dev;
   let result;
   try {
     result = await provider({ phone, code });
   } catch (e) {
     // فترة المعاينة فقط (OTP_DEV_SHOW=1): إذا فشل واتساب/SMS نعرض الرمز على الشاشة
     // مع سبب الفشل، حتى ما ينقفل الدخول على أحد أثناء تجهيز المزوّد.
-    if (config.sms.showDevCode && config.sms.provider !== 'dev') {
-      log.warn('فشل المزوّد — عرض الرمز على الشاشة (فترة المعاينة)', { provider: config.sms.provider });
+    // (مش مع احتياط SMS بوضع واتساب: هناك عرض الرمز بيفتح باب دخول على أرقام الناس)
+    if (config.sms.showDevCode && pname !== 'dev' && !providerName) {
+      log.warn('فشل المزوّد — عرض الرمز على الشاشة (فترة المعاينة)', { provider: pname });
       return {
         channel: 'dev', expiresInSec: config.otp.ttlSec, resendAfterSec: config.otp.resendCooldownSec,
         devCode: code, notice: e.message,
