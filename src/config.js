@@ -56,8 +56,23 @@ module.exports = {
       template: process.env.WHATSAPP_TEMPLATE || 'nashmi_otp',
       lang: process.env.WHATSAPP_TEMPLATE_LANG || 'ar',
       apiVersion: process.env.WHATSAPP_API_VERSION || 'v21.0',
+      // الدخول بواتساب (SMS_PROVIDER=whatsapp_link): الزبون بيبعت الرمز لرقم نشمي
+      // رقم نشمي بصيغة دولية بدون + (مثلاً 962793510509). إذا فاضي بنجيبه من Meta تلقائياً
+      number: (process.env.WHATSAPP_NUMBER || '').replace(/\D/g, ''),
+      // كلمة سر بتختارها إنت وبتحطها بـ Meta لما تربط الـ Webhook
+      verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || '',
+      // App Secret من إعدادات التطبيق بـ Meta — للتأكد إن الرسائل جاية فعلاً من واتساب
+      appSecret: process.env.WHATSAPP_APP_SECRET || '',
       // قوالب «المصادقة» فيها زر «نسخ الرمز» ولازم يوصله الرمز كمان. 0 = قالب بدون زر
       copyButton: process.env.WHATSAPP_COPY_BUTTON !== '0',
+    },
+    // احتياط SMS للي ما عنده واتساب (مع SMS_PROVIDER=whatsapp_link): android | twilio | فاضي
+    fallback: (process.env.SMS_FALLBACK || '').toLowerCase(),
+    // تلفون أندرويد برقمك بيبعت الرسائل (تطبيق SMS Gateway for Android — مجاني)
+    android: {
+      url: process.env.SMSGATE_URL || 'https://api.sms-gate.app/3rdparty/v1/messages',
+      username: process.env.SMSGATE_USERNAME || '',
+      password: process.env.SMSGATE_PASSWORD || '',
     },
     twilio: {
       sid: process.env.TWILIO_ACCOUNT_SID || '',
@@ -79,8 +94,11 @@ module.exports = {
     maxPerHourPerPhone: 6,
   },
   maps: {
-    tilesUrl: process.env.MAP_TILES_URL || 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    tilesUrlDark: process.env.MAP_TILES_URL_DARK || 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    // CARTO صارت تطلب مفتاح (بدونه بتطلع «API KEY REQUIRED» على الخريطة).
+    // الافتراضي: خرائط OpenStreetMap بدون مفتاح (بأسماء عربية) — ولو حطيت مفتاح CARTO منرجع لستايل أوبر الرمادي.
+    tilesUrl: process.env.MAP_TILES_URL || '',
+    tilesUrlDark: process.env.MAP_TILES_URL_DARK || '',
+    cartoKey: process.env.CARTO_API_KEY || '',
     geocoderUrl: process.env.GEOCODER_URL || 'https://nominatim.openstreetmap.org',
     routingUrl: process.env.ROUTING_URL || 'https://router.project-osrm.org',
   },
