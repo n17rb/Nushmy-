@@ -1,6 +1,6 @@
 {
   "name": "nashmi",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "private": true,
   "description": "نشمي — منصة نقل ركاب محلية (المرحلة الأولى: تطبيق الزبون)",
   "type": "commonjs",
