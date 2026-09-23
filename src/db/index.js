@@ -94,6 +94,25 @@ const COLUMN_MIGRATIONS = [
   ['users', 'status_reason', 'TEXT'],
   ['captain_documents', 'reviewed_by', 'TEXT'],
   ['captain_documents', 'reviewed_at', 'TEXT'],
+  // كتالوج السيارات (الشركة ← الفئة) — model القديم بيضل اسم الفئة للعرض
+  ['vehicles', 'make_id', 'TEXT'],
+  ['vehicles', 'class_id', 'TEXT'],
+  ['vehicles', 'color_key', 'TEXT'],
+  ['vehicles', 'seats', 'INTEGER'],
+  ['vehicles', 'fuel', 'TEXT'],
+  ['vehicles', 'transmission', 'TEXT'],
+  ['vehicles', 'body', 'TEXT'],
+  // دقة نقطة الانطلاق + ملاحظة للكابتن + موقع الزبون المباشر وهو بستنى
+  ['trips', 'pickup_accuracy_m', 'INTEGER'],
+  ['trips', 'pickup_note', 'TEXT'],
+  ['trips', 'rider_lat', 'REAL'],
+  ['trips', 'rider_lng', 'REAL'],
+  ['trips', 'rider_accuracy_m', 'INTEGER'],
+  ['trips', 'rider_loc_at', 'TEXT'],
+  // الإشعارات: لأي تطبيق (زبون/كابتن) + رابط
+  ['notifications', 'app', "TEXT NOT NULL DEFAULT 'customer'"],
+  ['notifications', 'url', 'TEXT'],
+  ['notifications', 'broadcast_id', 'TEXT'],
 ];
 
 async function ensureColumn(table, column, ddl) {
