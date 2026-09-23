@@ -11,6 +11,7 @@ const { parseJson, ok, created } = require('../lib/http');
 const { latLng, str } = require('../lib/validate');
 const { uuid, nowIso, tripCode } = require('../lib/ids');
 const { E } = require('../lib/errors');
+const cars = require('../services/cars');
 
 /** أنواع المركبات المتاحة */
 async function vehicleTypes(req, res) {
@@ -133,12 +134,33 @@ async function create(req, res, ctx) {
   });
 
   // بدء البحث فوراً بدل انتظار النبضة التالية
+  const acc = Number(body.pickupAccuracy);
+  const note = str(body.pickupNote, { max: 120, field: 'ملاحظة للكابتن', required: false });
+  if (Number.isFinite(acc) || note) {
+    await db.query('UPDATE trips SET pickup_accuracy_m = $1, pickup_note = $2 WHERE id = $3',
+      [Number.isFinite(acc) ? Math.round(Math.min(5000, Math.max(0, acc))) : null, note || null, id]);
+  }
+
   const trip = await db.one('SELECT * FROM trips WHERE id = $1', [id]);
   await dispatch.setStatus(trip, S.STATUS.SEARCHING, 'بدأ البحث عن كابتن');
   trip.status = S.STATUS.SEARCHING;
   await dispatch.sendBatch(trip);
 
   return created(res, { trip: await view(id, ctx.user.id) });
+}
+
+/** موقع الزبون المباشر وهو بستنى الكابتن — الكابتن بيشوفه ليوصل لعنده بالضبط */
+async function riderLocation(req, res, ctx, params) {
+  const body = await parseJson(req);
+  const { lat, lng } = latLng(body.lat, body.lng);
+  const acc = Number(body.accuracy);
+  const t = await db.one('SELECT id, status FROM trips WHERE id = $1 AND customer_id = $2', [params.id, ctx.user.id]);
+  if (!t) throw E.NOT_FOUND('الرحلة غير موجودة');
+  if (!['DRIVER_ACCEPTED', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED'].includes(t.status)) return ok(res, { shared: false });
+  if (Number.isFinite(acc) && acc > 150) return ok(res, { shared: false });   // دقة سيئة — ما منضلّل الكابتن
+  await db.query('UPDATE trips SET rider_lat = $1, rider_lng = $2, rider_accuracy_m = $3, rider_loc_at = $4 WHERE id = $5',
+    [lat, lng, Number.isFinite(acc) ? Math.round(acc) : null, nowIso(), t.id]);
+  return ok(res, { shared: true });
 }
 
 /** حالة الرحلة — العميل يستعلم عنها بشكل دوري */
@@ -278,29 +300,33 @@ async function view(tripId, customerId) {
   const t = await db.one('SELECT * FROM trips WHERE id = $1 AND customer_id = $2', [tripId, customerId]);
   if (!t) return null;
 
-  let captain = null;
+  let captain = null, eta = null;
   if (t.captain_id) {
     const c = await db.one(
-      `SELECT c.id, c.rating_sum, c.rating_count, c.trips_completed,
-              u.name, u.phone_e164, u.photo_url,
-              v.make, v.model, v.color, v.plate_number
-         FROM captains c
-         JOIN users u ON u.id = c.user_id
-         LEFT JOIN vehicles v ON v.captain_id = c.id AND v.is_active = 1
-        WHERE c.id = $1`,
-      [t.captain_id]
-    );
+      `SELECT c.id, c.rating_sum, c.rating_count, c.trips_completed, u.name, u.phone_e164, u.photo_url
+         FROM captains c JOIN users u ON u.id = c.user_id WHERE c.id = $1`, [t.captain_id]);
     if (c) {
-      const loc = await db.one('SELECT lat, lng, heading, updated_at FROM driver_locations WHERE captain_id = $1', [c.id]);
+      const v = await db.one('SELECT * FROM vehicles WHERE captain_id = $1 AND is_active = 1', [c.id]);
+      const loc = await db.one('SELECT lat, lng, heading, speed, accuracy, updated_at FROM driver_locations WHERE captain_id = $1', [c.id]);
       captain = {
         name: c.name,
         phone: c.phone_e164,
         photoUrl: c.photo_url,
         rating: c.rating_count ? Number((c.rating_sum / c.rating_count).toFixed(1)) : null,
         tripsCompleted: c.trips_completed,
-        vehicle: c.plate_number ? { make: c.make, model: c.model, color: c.color, plate: c.plate_number } : null,
-        location: loc ? { lat: loc.lat, lng: loc.lng, heading: loc.heading, updatedAt: loc.updated_at } : null,
+        vehicle: v ? await cars.view(v) : null,
+        location: loc ? { lat: loc.lat, lng: loc.lng, heading: loc.heading, accuracy: loc.accuracy, updatedAt: loc.updated_at,
+          ageSec: Math.round((Date.now() - Date.parse(loc.updated_at)) / 1000) } : null,
       };
+      // الوقت المتوقع: للوصول لعندك (قبل الركوب) أو للوجهة (خلال الرحلة) — التطبيق بيحسّنه من خط الطريق الحقيقي
+      if (loc) {
+        const to = t.status === 'TRIP_STARTED' ? { lat: t.dest_lat, lng: t.dest_lng } : { lat: t.pickup_lat, lng: t.pickup_lng };
+        const roadM = geo.roadDistanceEstimate({ lat: loc.lat, lng: loc.lng }, to);
+        if (['DRIVER_ACCEPTED', 'DRIVER_ARRIVING', 'TRIP_STARTED'].includes(t.status)) {
+          eta = { target: t.status === 'TRIP_STARTED' ? 'destination' : 'pickup', distanceM: roadM,
+            seconds: Math.max(60, geo.durationEstimate(roadM)) };
+        }
+      }
     }
   }
 
@@ -322,6 +348,8 @@ async function view(tripId, customerId) {
     cancellationFeeText: money.format(t.cancellation_fee_fils),
     paymentMethod: t.payment_method,
     captain,
+    eta,
+    pickupNote: t.pickup_note || null,
     requestedAt: t.requested_at,
     arrivedAt: t.arrived_at,
     completedAt: t.completed_at,
@@ -329,4 +357,4 @@ async function view(tripId, customerId) {
   };
 }
 
-module.exports = { vehicleTypes, estimate, create, get, active, history, cancel, cancelPreview, rate, view };
+module.exports = { vehicleTypes, estimate, create, get, active, history, cancel, cancelPreview, rate, view, riderLocation };
