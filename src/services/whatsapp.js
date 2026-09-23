@@ -34,7 +34,8 @@ function describe(err) {
   const code = Number(err.code), sub = Number(err.error_subcode);
   const meta = err.error_user_msg || (err.error_data && err.error_data.details) || err.message || '';
   let ar;
-  if (code === 190) ar = 'رمز الوصول (WHATSAPP_TOKEN) غلط أو منتهي. اعمل رمز دائم من «مستخدمو النظام» وحطه بـ Render.';
+  if (/permission to create message template/i.test(meta)) ar = 'Meta ما بتسمح لحسابك يعمل قالب رموز دخول (Authentication) قبل «توثيق النشاط التجاري» (بده سجل تجاري). الحل بدون توثيق: الدخول بواتساب — الزبون بيبعت الرمز لرقم نشمي (SMS_PROVIDER = whatsapp_link). شوف قسم «الدخول بواتساب» فوق.';
+  else if (code === 190) ar = 'رمز الوصول (WHATSAPP_TOKEN) غلط أو منتهي. اعمل رمز دائم من «مستخدمو النظام» وحطه بـ Render.';
   else if (code === 10 || code === 200 || code === 3) ar = 'رمز الوصول ما عنده صلاحية على هاد الحساب. تأكد إن مستخدم النظام معه حساب واتساب Nashmi (تحكم كامل)، وإن الرمز فيه صلاحيتي whatsapp_business_management و whatsapp_business_messaging.';
   else if (code === 100 && sub === 33) ar = 'المعرّف غلط أو الرمز ما بيشوفه. تأكد من WHATSAPP_PHONE_NUMBER_ID و WHATSAPP_WABA_ID بـ Render.';
   else if (code === 100 && (sub === 2388024 || /already exists/i.test(meta))) ar = 'القالب موجود أصلاً بنفس الاسم واللغة.';
@@ -62,10 +63,26 @@ const TPL_STATUS = {
 };
 
 /** فحص كامل — بيرجع قائمة خطوات، كل وحدة: ok / warn / bad / todo مع شرح */
-async function status() {
+async function status({ baseUrl = '' } = {}) {
   const cfg = w();
   const steps = [];
-  const add = (key, state, title, detail, extra = {}) => steps.push({ key, state, title, detail, ...extra });
+  let group = 'أساسيات';
+  const add = (key, state, title, detail, extra = {}) => steps.push({ key, state, title, detail, group, ...extra });
+  const fb = config.sms.fallback;
+  const smsInfo = { fallback: fb || null,
+    configured: fb === 'android' ? Boolean(config.sms.android.username && config.sms.android.password)
+      : fb === 'twilio' ? Boolean(config.sms.twilio.sid && config.sms.twilio.token && config.sms.twilio.from) : false };
+  const authmode = require('./authmode');
+  const wstats = await require('./walogin').stats();
+  const mode = await authmode.mode();
+  const appSecretSet = Boolean(await authmode.appSecret());
+  const setup = {
+    mode, verifyToken: await authmode.verifyToken(), appSecretSet,
+    appSecretFromEnv: Boolean(cfg.appSecret),
+    webhookVerifiedAt: wstats.webhookVerifiedAt, lastInbound: wstats.lastInbound,
+    privacyUrl: baseUrl + '/privacy', deletionUrl: baseUrl + '/privacy#delete',
+  };
+  const base = { provider: mode, template: cfg.template, lang: cfg.lang, webhookUrl: baseUrl + '/api/whatsapp/webhook', sms: smsInfo, setup };
 
   const missing = [
     !cfg.token && 'WHATSAPP_TOKEN',
@@ -74,13 +91,13 @@ async function status() {
   ].filter(Boolean);
   add('config', missing.length ? 'bad' : 'ok', 'إعدادات Render',
     missing.length ? `ناقص: ${missing.join('، ')}` : 'رمز الوصول ومعرّف الرقم ومعرّف الحساب موجودين');
-  if (missing.length) return { steps, ready: false, provider: config.sms.provider, template: cfg.template, lang: cfg.lang };
+  if (missing.length) return { steps, ready: false, ...base };
 
   // الرقم (وبنفس الوقت بنفحص إنه رمز الوصول شغال)
   const ph = await graph('GET', `${cfg.phoneNumberId}?fields=display_phone_number,verified_name,name_status,code_verification_status,quality_rating,platform_type,status`);
   if (!ph.ok) {
     add('token', 'bad', 'رمز الوصول', ph.error.ar, { error: ph.error });
-    return { steps, ready: false, provider: config.sms.provider, template: cfg.template, lang: cfg.lang };
+    return { steps, ready: false, ...base };
   }
   add('token', 'ok', 'رمز الوصول', 'صالح وبيوصل للرقم');
   const p = ph.data;
@@ -102,7 +119,30 @@ async function status() {
       `${wa.data.name || ''}: ${rs[1]}${rs[0] === 'warn' ? ' — القوالب ممكن تضل مقفلة لحد ما تخلص المراجعة' : ''}${rs[0] === 'bad' ? ' — لازم تقدّم طلب مراجعة من WhatsApp Manager' : ''}`);
   }
 
-  // القالب
+  const coreOk = !steps.some((s) => s.state === 'bad' || s.state === 'todo');
+
+  // ─── الطريقة 1: الدخول بواتساب (الزبون بيبعت الرمز) — ما بدها قالب ولا توثيق ───
+  group = 'الدخول بواتساب — الزبون بيبعت الرمز (بدون قالب)';
+  const whMissing = appSecretSet ? [] : ['App Secret'];
+  add('wh_config', appSecretSet ? 'ok' : 'bad', 'App Secret',
+    appSecretSet ? 'محفوظ ✓ — منتأكد فيه إن الرسائل جاية فعلاً من واتساب' : 'مش محفوظ — حطه بالخطوة 1 فوق.');
+  add('wh_verified', setup.webhookVerifiedAt ? 'ok' : 'todo', 'ربط الـ Webhook بـ Meta',
+    setup.webhookVerifiedAt ? `Meta أكّدت الرابط ✓ (${new Date(setup.webhookVerifiedAt).toLocaleString('ar-JO', { timeZone: 'Asia/Amman' })})`
+      : 'لسا Meta ما أكّدت الرابط — الخطوة 2 فوق.', { copy: base.webhookUrl });
+  const subs = await graph('GET', `${cfg.wabaId}/subscribed_apps`);
+  const subscribed = subs.ok && (subs.data.data || []).length > 0;
+  add('wh_subscribed', subscribed ? 'ok' : 'todo', 'ربط حساب واتساب بالتطبيق',
+    subscribed ? 'مربوط — Meta بتبعت رسائل رقم نشمي لتطبيقك' : (subs.ok ? 'مش مربوط لسا — اكبس «ربط الاستقبال» تحت.' : subs.error.ar),
+    { canSubscribe: !subscribed, error: subs.ok ? undefined : subs.error });
+  const inbound = wstats.lastInbound;
+  add('wh_inbound', inbound ? 'ok' : 'warn', 'وصول الرسائل لنشمي',
+    inbound ? `آخر رسالة وصلت: ${new Date(inbound).toLocaleString('ar-JO', { timeZone: 'Asia/Amman' })}`
+      : 'ما وصلت ولا رسالة من آخر تشغيل. ابعت «مرحبا» لرقم نشمي من واتساب وأعد الفحص. إذا ما وصلت: تأكد إن رابط الـ Webhook متضاف بـ Meta ومشترك بـ messages، وإن التطبيق منشور (Live).');
+  const linkReady = coreOk && !whMissing.length && subscribed && Boolean(inbound);
+  setup.subscribed = subscribed;
+
+  // ─── الطريقة 2: نشمي بيبعت الرمز (قالب مصادقة — بده توثيق نشاط تجاري) ───
+  group = 'نشمي بيبعت الرمز — قالب (بده توثيق نشاط تجاري)';
   let tpl = null;
   const tl = await graph('GET', `${cfg.wabaId}/message_templates?fields=name,status,language,category,rejected_reason&limit=100`);
   if (!tl.ok) {
@@ -121,15 +161,27 @@ async function status() {
     }
   }
 
-  const blocking = steps.some((s) => s.state === 'bad' || s.state === 'todo');
-  const ready = !blocking && tpl && tpl.status === 'APPROVED';
-  add('provider', config.sms.provider === 'whatsapp' ? 'ok' : (ready ? 'todo' : 'warn'), 'تشغيل الإرسال على واتساب',
-    config.sms.provider === 'whatsapp'
-      ? 'SMS_PROVIDER = whatsapp — الرموز بتنبعت على واتساب'
-      : ready ? 'كل إشي جاهز ✓ — جرّب «إرسال رمز تجربة»، وإذا وصلك غيّر SMS_PROVIDER لـ whatsapp بـ Render'
-        : `SMS_PROVIDER = ${config.sms.provider} — خليه هيك لحد ما تصير كل الخطوات فوق ✓`);
+  const tplReady = coreOk && tpl && tpl.status === 'APPROVED';
 
-  return { steps, ready: Boolean(ready), provider: config.sms.provider, template: cfg.template, lang: cfg.lang };
+  // ─── التشغيل ───
+  group = 'التشغيل';
+  const MODE_AR = { dev: 'رمز على الشاشة (تجربة)', whatsapp_link: 'واتساب — الزبون بيبعت الرمز', whatsapp: 'واتساب بقالب', android: 'SMS من تلفون أندرويد', twilio: 'SMS Twilio' };
+  let state, detail;
+  if (mode === 'whatsapp_link') {
+    state = linkReady ? 'ok' : 'bad';
+    detail = linkReady ? 'شغّال ✓ — الزبائن بيأكدوا أرقامهم برسالة واتساب.'
+      : 'مفعّل بس في خطوات ناقصة فوق — الناس ممكن ما تقدر تدخل! رجّعه لـ «رمز على الشاشة» لحد ما تكمّلها.';
+  } else if (mode === 'whatsapp') {
+    state = tplReady ? 'ok' : 'bad';
+    detail = tplReady ? 'شغّال ✓ — الرموز بتنبعت بالقالب.' : 'مفعّل بس القالب مش معتمد — الرموز ما رح توصل.';
+  } else if (linkReady) {
+    state = 'todo'; detail = `كل إشي جاهز ✓ — اكبس «شغّل التحقق بواتساب» بالخطوة 4. (هلأ: ${MODE_AR[mode] || mode})`;
+  } else {
+    state = 'warn'; detail = `هلأ: ${MODE_AR[mode] || mode}. كمّل الخطوات فوق وبعدين شغّل واتساب.`;
+  }
+  add('provider', state, 'طريقة التحقق الحالية', detail);
+
+  return { steps, ready: Boolean(linkReady || tplReady), linkReady: Boolean(linkReady), tplReady: Boolean(tplReady), ...base };
 }
 
 /** إنشاء قالب المصادقة (نص Meta الجاهز + زر نسخ الرمز + مدة الصلاحية) */
@@ -167,4 +219,10 @@ async function sendTest(phoneE164, code) {
   return r.ok ? { ok: true, messageId: r.data.messages && r.data.messages[0] && r.data.messages[0].id } : { ok: false, error: r.error };
 }
 
-module.exports = { graph, describe, status, createTemplate, sendTest };
+/** ربط حساب واتساب بالتطبيق حتى توصلنا رسائله (subscribed_apps) */
+async function subscribeApp() {
+  const r = await graph('POST', `${w().wabaId}/subscribed_apps`);
+  return r.ok ? { ok: true } : { ok: false, error: r.error };
+}
+
+module.exports = { graph, describe, status, createTemplate, sendTest, subscribeApp };
