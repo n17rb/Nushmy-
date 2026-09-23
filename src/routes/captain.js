@@ -18,6 +18,32 @@ const { str, latLng } = require('../lib/validate');
 const { uuid, nowIso } = require('../lib/ids');
 const { E } = require('../lib/errors');
 const log = require('../lib/log');
+const V = require('../data/vehicles');
+const cars = require('../services/cars');
+const notify = require('../services/notify');
+
+/** الكابتن سجّل سيارة ما إلها صورة بالمكتبة ← تنبيه للإدارة ترفع الصورة */
+async function alertIfNoCarImage(car, captainName) {
+  try {
+    if (car.makeId && car.classId) {
+      if (await cars.imageFor(car.makeId, car.classId)) return;
+      const mk = V.makeById(car.makeId), cl = V.classById(car.makeId, car.classId);
+      notify.alert({
+        type: 'car_image_missing', key: car.makeId + '/' + car.classId,
+        title: 'سيارة بدون صورة',
+        body: `${mk ? mk.ar : car.make} ${cl ? cl.ar : car.model} — الكابتن ${captainName || ''} سجّلها والزبون رح يشوفها بدون صورة`,
+        url: '/admin/#/cars', data: { makeId: car.makeId, classId: car.classId },
+      });
+      return;
+    }
+    notify.alert({
+      type: 'car_image_missing', key: 'manual:' + car.make + ' ' + car.model,
+      title: 'سيارة مكتوبة يدوي',
+      body: `${car.make} ${car.model} — الكابتن ${captainName || ''} كتبها يدوي (مش من الكتالوج)، فما إلها صورة`,
+      url: '/admin/#/cars', data: { make: car.make, model: car.model },
+    });
+  } catch { /* التنبيه ما بيوقف التسجيل */ }
+}
 
 const ACTIVE_CAPTAIN_STATUSES = ['DRIVER_ASSIGNED', 'DRIVER_ACCEPTED', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED', 'TRIP_STARTED'];
 const IN_LIST = ACTIVE_CAPTAIN_STATUSES.map((s) => `'${s}'`).join(',');
@@ -97,12 +123,38 @@ async function me(req, res, ctx) {
     },
     vehicle: vehicle && {
       typeId: vehicle.vehicle_type_id, typeName: vehicle.type_name, typeCode: vehicle.type_code,
-      make: vehicle.make, model: vehicle.model, color: vehicle.color, year: vehicle.year, plate: vehicle.plate_number,
+      makeId: vehicle.make_id, classId: vehicle.class_id,
+      ...(await cars.view(vehicle)),
     },
     documents: docs,
     wallet: { balanceFils: bal, balanceText: money.format(bal), minBalanceFils: minBal, canReceive: bal >= minBal },
     today: { ...today, netText: money.format(today.netFils), grossText: money.format(today.grossFils) },
   });
+}
+
+/**
+ * بيانات السيارة من الكتالوج: الشركة ← الفئة (مش «الموديل») + السنة + اللون + الوقود + الناقل.
+ * لو السيارة مش بالكتالوج: makeId = 'other' ومنكتب الاسم يدوي.
+ */
+function vehicleFields(body) {
+  const thisYear = new Date().getFullYear();
+  const year = Number(body.year);
+  if (!Number.isInteger(year) || year < 1995 || year > thisYear + 1) throw E.VALIDATION_FAILED('سنة الصنع غير صحيحة');
+  const mk = body.makeId && V.makeById(body.makeId);
+  const cl = mk && V.classById(mk.id, body.classId);
+  let make, model, makeId = null, classId = null, seats = null, fuel = null, bodyType = null;
+  if (mk && cl) {
+    make = mk.en; model = cl.en; makeId = mk.id; classId = cl.id; seats = cl.seats; fuel = cl.fuel; bodyType = cl.body;
+  } else {
+    make = str(body.make, { min: 2, max: 30, field: 'الشركة' });
+    model = str(body.model, { min: 1, max: 30, field: 'الفئة' });
+    seats = Number.isInteger(Number(body.seats)) && body.seats >= 2 && body.seats <= 15 ? Number(body.seats) : null;
+  }
+  const co = body.colorKey && V.colorById(body.colorKey);
+  const color = co ? co.ar : str(body.color, { min: 2, max: 20, field: 'اللون' });
+  if (V.FUEL_AR[body.fuel]) fuel = body.fuel;
+  const transmission = body.transmission === 'manual' ? 'manual' : 'automatic';
+  return { make, model, color, year, makeId, classId, colorKey: co ? co.id : null, seats, fuel, transmission, body: bodyType };
 }
 
 async function register(req, res, ctx) {
@@ -113,13 +165,9 @@ async function register(req, res, ctx) {
   const name = str(body.name, { min: 2, max: 60, field: 'الاسم' });
   const vt = await db.one('SELECT id FROM vehicle_types WHERE id = $1 AND is_active = 1', [str(body.vehicleTypeId, { field: 'نوع السيارة' })]);
   if (!vt) throw E.VALIDATION_FAILED('نوع السيارة غير صحيح');
-  const make = str(body.make, { min: 2, max: 30, field: 'نوع السيارة (الشركة)' });
-  const model = str(body.model, { min: 1, max: 30, field: 'الموديل' });
-  const color = str(body.color, { min: 2, max: 20, field: 'اللون' });
+  const car = vehicleFields(body);
   const plate = str(body.plate, { min: 3, max: 15, field: 'رقم اللوحة' }).replace(/\s+/g, ' ');
-  const year = Number(body.year);
-  const thisYear = new Date().getFullYear();
-  if (!Number.isInteger(year) || year < 1995 || year > thisYear + 1) throw E.VALIDATION_FAILED('سنة الصنع غير صحيحة');
+  const { make, model, color, year } = car;
 
   const city = await db.one('SELECT id FROM cities WHERE is_active = 1 ORDER BY created_at', []);
   const now = nowIso();
@@ -134,15 +182,34 @@ async function register(req, res, ctx) {
       [captainId, ctx.user.id, status, city ? city.id : null, status === 'APPROVED' ? now : null, now]
     );
     await tx.query(
-      `INSERT INTO vehicles (id, captain_id, vehicle_type_id, make, model, color, year, plate_number, is_active, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,$9)`,
-      [uuid(), captainId, vt.id, make, model, color, year, plate, now]
+      `INSERT INTO vehicles (id, captain_id, vehicle_type_id, make, model, color, year, plate_number, is_active, created_at,
+                             make_id, class_id, color_key, seats, fuel, transmission, body)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$10,$11,$12,$13,$14,$15,$16)`,
+      [uuid(), captainId, vt.id, make, model, color, year, plate, now,
+       car.makeId, car.classId, car.colorKey, car.seats, car.fuel, car.transmission, car.body]
     );
     await wallet.ensureWallet(captainId, tx);
   });
   await audit('user', ctx.user.id, 'CAPTAIN_REGISTERED', 'captain', captainId, { status, autoApproved: status === 'APPROVED' });
+  alertIfNoCarImage(car, name);
   log.info('كابتن جديد', { captainId, status });
   return created(res, { status });
+}
+
+/** تعديل بيانات السيارة (الشركة، الفئة، السنة، اللون…) — رقم اللوحة بتغيّره الإدارة بس */
+async function updateVehicle(req, res, ctx) {
+  const c = await captainOf(ctx.user, { mustBeApproved: false });
+  const body = await parseJson(req);
+  const car = vehicleFields(body);
+  const v = await db.one('SELECT * FROM vehicles WHERE captain_id = $1 AND is_active = 1', [c.id]);
+  if (!v) throw E.NOT_FOUND('السيارة غير موجودة');
+  await db.query(
+    `UPDATE vehicles SET make = $1, model = $2, color = $3, year = $4, make_id = $5, class_id = $6, color_key = $7,
+       seats = $8, fuel = $9, transmission = $10, body = $11 WHERE id = $12`,
+    [car.make, car.model, car.color, car.year, car.makeId, car.classId, car.colorKey, car.seats, car.fuel, car.transmission, car.body, v.id]);
+  await audit('user', ctx.user.id, 'VEHICLE_UPDATED', 'vehicle', v.id, { make: car.make, model: car.model, year: car.year, color: car.color });
+  alertIfNoCarImage(car, ctx.user.name);
+  return ok(res, { vehicle: await cars.view(await db.one('SELECT * FROM vehicles WHERE id = $1', [v.id])) });
 }
 
 async function uploadDocument(req, res, ctx) {
@@ -293,7 +360,25 @@ async function acceptOffer(req, res, ctx, params) {
     await tx.query('UPDATE captains SET offers_accepted = offers_accepted + 1 WHERE id = $1', [c.id]);
     return offer.trip_id;
   });
+  tellCustomer(tripId, 'accepted');
   return ok(res, { trip: await tripView(tripId, c.id) });
+}
+
+/** إشعار للزبون على التلفون (حتى لو التطبيق مسكّر) */
+async function tellCustomer(tripId, what) {
+  try {
+    const t = await db.one(`SELECT t.customer_id, t.code, u.name AS cap_name, v.color, v.make, v.model, v.plate_number
+        FROM trips t LEFT JOIN captains c ON c.id = t.captain_id LEFT JOIN users u ON u.id = c.user_id
+        LEFT JOIN vehicles v ON v.captain_id = c.id AND v.is_active = 1 WHERE t.id = $1`, [tripId]);
+    if (!t) return;
+    const car = [t.make, t.model, t.color].filter(Boolean).join(' ');
+    const first = t.cap_name ? String(t.cap_name).split(/\s+/)[0] : 'الكابتن';
+    const msg = {
+      accepted: { title: `${first} جاي لعندك 🚗`, body: `${car}${t.plate_number ? ' · ' + t.plate_number : ''}` },
+      arrived:  { title: 'الكابتن وصل وبستناك', body: `${car}${t.plate_number ? ' · ' + t.plate_number : ''} — اطلع لعنده` },
+    }[what];
+    if (msg) notify.fire(t.customer_id, 'customer', { type: 'trip', ...msg, url: '/', tag: 'trip-' + tripId, inbox: false, data: { tripId } });
+  } catch {}
 }
 
 async function rejectOffer(req, res, ctx, params) {
@@ -321,6 +406,12 @@ async function tripView(tripId, captainId) {
     pickup: { lat: t.pickup_lat, lng: t.pickup_lng, address: t.pickup_address },
     destination: { lat: t.dest_lat, lng: t.dest_lng, address: t.dest_address },
     customer: { name: u && u.name, firstName: firstName(u && u.name), phone: u && u.phone_e164, photoUrl: u && u.photo_url },
+    pickupNote: t.pickup_note || null,
+    pickupAccuracyM: t.pickup_accuracy_m || null,
+    // موقع الزبون المباشر وهو بستنى (لو شاركه خلال آخر دقيقتين) — عشان توصل لعنده بالضبط
+    riderLocation: t.rider_loc_at && Date.now() - Date.parse(t.rider_loc_at) < 120000
+      && ['DRIVER_ACCEPTED', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED'].includes(t.status)
+      ? { lat: t.rider_lat, lng: t.rider_lng, accuracyM: t.rider_accuracy_m, at: t.rider_loc_at } : null,
     estFareFils: t.est_fare_fils,
     estFareText: money.format(t.est_fare_fils),
     estDistanceKm: (t.est_distance_m / 1000).toFixed(1),
@@ -395,6 +486,7 @@ async function arrived(req, res, ctx, params) {
       if (d > maxM) throw E.TOO_FAR_FROM_PICKUP(d);
     },
   });
+  tellCustomer(params.id, 'arrived');
   return ok(res, { trip: await tripView(params.id, c.id) });
 }
 
@@ -604,7 +696,7 @@ async function requestDeposit(req, res, ctx) {
 }
 
 module.exports = {
-  me, register, uploadDocument, setGoal, setOnline, updateLocation,
+  me, register, updateVehicle, uploadDocument, setGoal, setOnline, updateLocation,
   currentOffer, acceptOffer, rejectOffer,
   activeTrip, getTrip, arrived, start, complete, cancel, rateCustomer,
   earnings, walletView, requestDeposit, ammanDayStart,
