@@ -21,8 +21,8 @@ const { E, AppError } = require('../lib/errors');
 const ROLES = {
   SUPER_ADMIN:    { label: 'مدير عام',        perms: ['*'] },
   FINANCE_ADMIN:  { label: 'مسؤول مالي',      perms: ['view', 'finance'] },
-  DISPATCH_ADMIN: { label: 'مسؤول تشغيل',     perms: ['view', 'trips.manage', 'captains.manage'] },
-  SUPPORT_ADMIN:  { label: 'دعم فني',         perms: ['view', 'trips.manage', 'customers.manage'] },
+  DISPATCH_ADMIN: { label: 'مسؤول تشغيل',     perms: ['view', 'trips.manage', 'captains.manage', 'support', 'places'] },
+  SUPPORT_ADMIN:  { label: 'دعم فني',         perms: ['view', 'trips.manage', 'customers.manage', 'support'] },
   MODERATOR:      { label: 'مراقب (عرض فقط)', perms: ['view'] },
 };
 
@@ -555,7 +555,7 @@ async function pricingUpdate(req, res, ctx, params) {
 /* ================================== الإعدادات ================================== */
 async function settingsList(req, res, ctx) {
   await requireAdmin(ctx);
-  const rows = await db.query('SELECT * FROM settings ORDER BY key');
+  const rows = (await db.query('SELECT * FROM settings ORDER BY key')).filter((r) => !settings.isPrivate(r.key));
   const cities = await db.query('SELECT * FROM cities ORDER BY created_at');
   return ok(res, {
     settings: rows.map((s) => ({ key: s.key, value: s.value, type: s.value_type, label: s.label_ar, updatedAt: s.updated_at })),
@@ -576,7 +576,7 @@ async function settingUpdate(req, res, ctx, params) {
   const admin = await requireAdmin(ctx, 'settings');
   const body = await parseJson(req);
   const reason = reasonOf(body);
-  const s = await db.one('SELECT * FROM settings WHERE key = $1', [params.key]);
+  const s = settings.isPrivate(params.key) ? null : await db.one('SELECT * FROM settings WHERE key = $1', [params.key]);
   if (!s) throw E.NOT_FOUND('الإعداد غير موجود');
   let value = body.value;
   if (s.value_type === 'int') {
@@ -588,7 +588,7 @@ async function settingUpdate(req, res, ctx, params) {
   } else if (s.value_type === 'bool') {
     value = value === true || value === '1' || value === 1 ? '1' : '0';
   } else {
-    value = str(value, { max: 120, field: 'القيمة', required: false }) || '';
+    value = str(value, { max: 300, field: 'القيمة', required: false }) || '';
   }
   if (value === s.value) return ok(res, { changed: false });
   await db.query('UPDATE settings SET value = $1, updated_at = $2, updated_by = $3 WHERE key = $4', [value, nowIso(), admin.id, s.key]);
@@ -647,9 +647,20 @@ async function adminRemove(req, res, ctx, params) {
 const whatsapp = require('../services/whatsapp');
 const otpService = require('../services/otp');
 
+const baseUrlOf = (req) => `${(req.headers['x-forwarded-proto'] || 'http').split(',')[0]}://${req.headers['x-forwarded-host'] || req.headers.host}`;
+// ملاحظة: نتيجة Meta بترجع بـ success (مش ok) لأن ok:false بيخلي الواجهة تعتبرها خطأ بالطلب نفسه
+const outcome = (r) => { const { ok: success, ...rest } = r; return { success, ...rest }; };
+
 async function whatsappStatus(req, res, ctx) {
   await requireAdmin(ctx, 'settings');
-  return ok(res, await whatsapp.status());
+  return ok(res, await whatsapp.status({ baseUrl: baseUrlOf(req) }));
+}
+
+async function whatsappSubscribe(req, res, ctx) {
+  const admin = await requireAdmin(ctx, 'settings');
+  const r = await whatsapp.subscribeApp();
+  await audit(admin, 'WHATSAPP_SUBSCRIBE', 'setting', 'subscribed_apps', null, { ok: r.ok, error: r.error ? r.error.code : null }, null, ctx.ip);
+  return ok(res, outcome(r));
 }
 
 async function whatsappTemplate(req, res, ctx) {
@@ -657,7 +668,7 @@ async function whatsappTemplate(req, res, ctx) {
   const r = await whatsapp.createTemplate();
   await audit(admin, 'WHATSAPP_TEMPLATE', 'setting', config.sms.whatsapp.template, null,
     { ok: r.ok, status: r.status || (r.exists ? 'EXISTS' : null), error: r.error ? `${r.error.code || ''} ${r.error.message || ''}`.trim() : null }, null, ctx.ip);
-  return ok(res, r);
+  return ok(res, outcome(r));
 }
 
 async function whatsappTest(req, res, ctx) {
@@ -666,7 +677,57 @@ async function whatsappTest(req, res, ctx) {
   const phone = body.phone ? normalizeJordanPhone(body.phone) : admin.phone_e164;
   const r = await whatsapp.sendTest(phone, otpService.generateCode(config.otp.length));
   await audit(admin, 'WHATSAPP_TEST', 'user', admin.id, null, { to: phone, ok: r.ok, error: r.error ? r.error.code : null }, null, ctx.ip);
-  return ok(res, { ...r, to: phone });
+  return ok(res, { ...outcome(r), to: phone });
+}
+
+/** حفظ App Secret (من إعدادات التطبيق بـ Meta) — ما بيرجع للواجهة أبداً */
+async function whatsappSecret(req, res, ctx) {
+  const admin = await requireAdmin(ctx, 'settings');
+  const body = await parseJson(req);
+  const secret = String(body.appSecret || '').trim();
+  if (!/^[a-f0-9]{32}$/i.test(secret)) throw E.VALIDATION_FAILED('App Secret شكله غلط — لازم يكون 32 حرف ورقم إنجليزي (انسخه كامل من Meta)');
+  await settings.set('wa.app_secret', secret);
+  await audit(admin, 'WHATSAPP_SECRET', 'setting', 'wa.app_secret', null, { saved: true }, null, ctx.ip);
+  return ok(res, { saved: true });
+}
+
+/** تغيير طريقة التحقق — واتساب ما بيتفعّل إلا إذا الفحص كله ✓ (حتى ما ينقفل الدخول على الناس) */
+async function authModeUpdate(req, res, ctx) {
+  const admin = await requireAdmin(ctx, 'settings');
+  const body = await parseJson(req);
+  const mode = String(body.mode || '');
+  if (!['dev', 'whatsapp_link', 'whatsapp'].includes(mode)) throw E.VALIDATION_FAILED('طريقة غير معروفة');
+  if (mode !== 'dev') {
+    const st = await whatsapp.status({ baseUrl: baseUrlOf(req) });
+    const ready = mode === 'whatsapp_link' ? st.linkReady : st.tplReady;
+    if (!ready) {
+      const missing = st.steps.filter((x) => x.state === 'bad' || x.state === 'todo').map((x) => x.title);
+      throw E.VALIDATION_FAILED('لسا مش جاهز — كمّل: ' + (missing.join('، ') || 'خطوات الفحص'));
+    }
+  }
+  const before = await require('../services/authmode').mode();
+  await settings.set('auth.mode', mode);
+  await audit(admin, 'AUTH_MODE', 'setting', 'auth.mode', { mode: before }, { mode }, null, ctx.ip);
+  return ok(res, { mode });
+}
+
+/** رسالة SMS تجربة عن طريق مزوّد الاحتياط (أو المزوّد الأساسي إذا هو SMS) */
+async function smsTest(req, res, ctx) {
+  const admin = await requireAdmin(ctx, 'settings');
+  const body = await parseJson(req);
+  const phone = body.phone ? normalizeJordanPhone(body.phone) : admin.phone_e164;
+  const name = config.sms.fallback || await require('../services/authmode').mode();
+  const provider = otpService.providers[name];
+  if (!provider || name === 'dev' || name.startsWith('whatsapp')) {
+    return ok(res, { success: false, error: { ar: 'ما في مزوّد رسائل نصية مفعّل. حط SMS_FALLBACK=android بـ Render.' } });
+  }
+  try {
+    await provider({ phone, code: otpService.generateCode(config.otp.length) });
+    await audit(admin, 'SMS_TEST', 'user', admin.id, null, { to: phone, ok: true }, null, ctx.ip);
+    return ok(res, { success: true, to: phone, provider: name });
+  } catch (e) {
+    return ok(res, { success: false, error: { ar: e.messageAr || e.message } });
+  }
 }
 
 /* ================================== السجل ================================== */
@@ -676,7 +737,7 @@ const ACTION_LABEL = {
   WALLET_REFUND: 'استرجاع', DEPOSIT_APPROVED: 'موافقة شحن', DEPOSIT_REJECTED: 'رفض شحن', USER_STATUS: 'تغيير حالة حساب',
   PRICING_UPDATED: 'تعديل أسعار', SETTING_UPDATED: 'تعديل إعداد', CITY_UPDATED: 'تعديل منطقة', ADMIN_GRANTED: 'إضافة مشرف',
   ADMIN_REVOKED: 'إزالة مشرف', CAPTAIN_REGISTERED: 'تسجيل كابتن', DEPOSIT_REQUESTED: 'طلب شحن',
-  WHATSAPP_TEMPLATE: 'إنشاء قالب واتساب', WHATSAPP_TEST: 'رمز تجربة واتساب',
+  WHATSAPP_TEMPLATE: 'إنشاء قالب واتساب', WHATSAPP_TEST: 'رمز تجربة واتساب', WHATSAPP_SUBSCRIBE: 'ربط استقبال واتساب', DELETE_REQUEST: 'طلب حذف حساب', SMS_TEST: 'رسالة SMS تجربة', WHATSAPP_SECRET: 'حفظ App Secret', AUTH_MODE: 'تغيير طريقة التحقق',
 };
 
 async function auditList(req, res, ctx) {
@@ -696,9 +757,9 @@ async function auditList(req, res, ctx) {
 }
 
 module.exports = {
-  ROLES, me, dashboard, live, trips, tripDetail, cancelTrip,
+  ROLES, requireAdmin, audit, me, dashboard, live, trips, tripDetail, cancelTrip,
   captains, captainDetail, captainStatus, captainOffline, documentReview, fileView, walletAdjust,
   deposits, depositApprove, depositReject, customers, customerDetail, customerStatus,
   pricingList, pricingUpdate, settingsList, settingUpdate, cityUpdate, admins, adminAdd, adminRemove, auditList,
-  whatsappStatus, whatsappTemplate, whatsappTest,
+  whatsappStatus, whatsappTemplate, whatsappTest, whatsappSubscribe, smsTest, whatsappSecret, authModeUpdate,
 };
