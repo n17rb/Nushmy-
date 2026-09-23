@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS users (
   photo_url     TEXT,
   status        TEXT NOT NULL DEFAULT 'ACTIVE',
   language      TEXT NOT NULL DEFAULT 'ar',
-  theme         TEXT NOT NULL DEFAULT 'system',
+  theme         TEXT NOT NULL DEFAULT 'light',
   city_id       TEXT REFERENCES cities(id),
   is_verified   INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT NOT NULL,
@@ -101,6 +101,20 @@ CREATE TABLE IF NOT EXISTS otp_codes (
   created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_otp_phone ON otp_codes(phone_e164, created_at);
+
+-- الدخول بواتساب: الزبون بيبعت رسالة فيها الرمز لرقم نشمي، وبنأكد رقمه من الرسالة نفسها
+CREATE TABLE IF NOT EXISTS wa_logins (
+  id          TEXT PRIMARY KEY,               -- معرّف سري بيحمله المتصفح الي طلب الدخول
+  phone_e164  TEXT NOT NULL,
+  code        TEXT NOT NULL,                  -- الرمز الي بيكون بالرسالة
+  status      TEXT NOT NULL DEFAULT 'PENDING', -- PENDING | VERIFIED | USED
+  ip          TEXT,
+  created_at  TEXT NOT NULL,
+  expires_at  TEXT NOT NULL,
+  verified_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_wa_logins_code ON wa_logins(code, status);
+CREATE INDEX IF NOT EXISTS idx_wa_logins_phone ON wa_logins(phone_e164, created_at);
 
 CREATE TABLE IF NOT EXISTS sessions (
   id           TEXT PRIMARY KEY,
@@ -406,3 +420,129 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity, entity_id, created_at);
+
+-- ================= أماكن مشهورة (بتضيفها الإدارة) — بتطلع أول نتائج البحث =================
+CREATE TABLE IF NOT EXISTS pois (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  name_norm  TEXT NOT NULL,
+  category   TEXT NOT NULL DEFAULT 'place',
+  address    TEXT,
+  lat        REAL NOT NULL,
+  lng        REAL NOT NULL,
+  is_active  INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pois_active ON pois(is_active);
+
+-- ================= المحادثات =================
+-- kind = 'trip'    : الزبون ↔ الكابتن خلال الرحلة (الإدارة بتقدر تقرأ)
+-- kind = 'support' : الزبون أو الكابتن ↔ الإدارة (الدعم الفني، إبلاغ، أغراض منسية)
+CREATE TABLE IF NOT EXISTS chat_threads (
+  id               TEXT PRIMARY KEY,
+  kind             TEXT NOT NULL,
+  trip_id          TEXT REFERENCES trips(id),
+  user_id          TEXT NOT NULL REFERENCES users(id),
+  side             TEXT NOT NULL,
+  peer_user_id     TEXT REFERENCES users(id),
+  topic            TEXT NOT NULL DEFAULT 'general',
+  subject          TEXT,
+  status           TEXT NOT NULL DEFAULT 'OPEN',
+  last_message_at  TEXT,
+  last_preview     TEXT,
+  last_sender_role TEXT,
+  user_read_at     TEXT,
+  peer_read_at     TEXT,
+  admin_read_at    TEXT,
+  created_at       TEXT NOT NULL,
+  updated_at       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_threads_user ON chat_threads(user_id, side);
+CREATE INDEX IF NOT EXISTS idx_threads_peer ON chat_threads(peer_user_id);
+CREATE INDEX IF NOT EXISTS idx_threads_trip ON chat_threads(trip_id);
+CREATE INDEX IF NOT EXISTS idx_threads_last ON chat_threads(last_message_at);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id          TEXT PRIMARY KEY,
+  thread_id   TEXT NOT NULL REFERENCES chat_threads(id),
+  sender_id   TEXT REFERENCES users(id),
+  sender_role TEXT NOT NULL,
+  body        TEXT NOT NULL,
+  file_id     TEXT,
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chatmsg_thread ON chat_messages(thread_id, created_at);
+
+-- ================= الإشعارات الفورية (Push) =================
+-- platform = 'web' (متصفح/PWA) أو 'fcm' (تطبيق أندرويد/آيفون من المتجر عبر Firebase)
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users(id),
+  app         TEXT NOT NULL DEFAULT 'customer',
+  platform    TEXT NOT NULL DEFAULT 'web',
+  endpoint    TEXT NOT NULL UNIQUE,
+  p256dh      TEXT,
+  auth        TEXT,
+  user_agent  TEXT,
+  created_at  TEXT NOT NULL,
+  last_ok_at  TEXT,
+  fail_count  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id, app);
+
+-- رسائل جماعية من الإدارة (عروض، أكواد خصم، تنبيهات)
+CREATE TABLE IF NOT EXISTS broadcasts (
+  id          TEXT PRIMARY KEY,
+  audience    TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  body        TEXT NOT NULL,
+  promo_code  TEXT,
+  sent_count  INTEGER NOT NULL DEFAULT 0,
+  push_count  INTEGER NOT NULL DEFAULT 0,
+  created_by  TEXT,
+  created_at  TEXT NOT NULL
+);
+
+-- ================= صور السيارات (حسب Style Bible) =================
+-- صورة لكل فئة (وممكن لكل لون). بدون صورة ← رسمة جاهزة بنفس الزاوية ولون السيارة الحقيقي
+CREATE TABLE IF NOT EXISTS car_images (
+  id          TEXT PRIMARY KEY,
+  make_id     TEXT NOT NULL,
+  class_id    TEXT NOT NULL,
+  color_key   TEXT NOT NULL DEFAULT '',
+  file_id     TEXT NOT NULL,
+  created_by  TEXT,
+  created_at  TEXT NOT NULL,
+  UNIQUE (make_id, class_id, color_key)
+);
+
+-- ================= المكالمات داخل التطبيق (صوت عبر الإنترنت) =================
+-- الزبون والكابتن بيحكوا من التطبيق بدون رصيد. الصوت بيمشي بين التلفونين مباشرة (WebRTC)،
+-- والسيرفر بس بيمرّر رسائل الربط (offer / answer / ice).
+CREATE TABLE IF NOT EXISTS calls (
+  id           TEXT PRIMARY KEY,
+  trip_id      TEXT REFERENCES trips(id),
+  caller_id    TEXT NOT NULL REFERENCES users(id),
+  callee_id    TEXT NOT NULL REFERENCES users(id),
+  caller_role  TEXT NOT NULL,
+  status       TEXT NOT NULL,
+  end_reason   TEXT,
+  created_at   TEXT NOT NULL,
+  answered_at  TEXT,
+  ended_at     TEXT,
+  duration_s   INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_calls_callee ON calls(callee_id, status);
+CREATE INDEX IF NOT EXISTS idx_calls_trip ON calls(trip_id, created_at);
+
+CREATE TABLE IF NOT EXISTS call_signals (
+  id         TEXT PRIMARY KEY,
+  call_id    TEXT NOT NULL REFERENCES calls(id),
+  from_user  TEXT NOT NULL,
+  kind       TEXT NOT NULL,
+  payload    TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_signals_call ON call_signals(call_id, created_at);
