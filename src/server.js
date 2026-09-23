@@ -23,7 +23,14 @@ const tripRoutes = require('./routes/trips');
 const captainRoutes = require('./routes/captains');
 const cap = require('./routes/captain');
 const adm = require('./routes/admin');
+const waRoutes = require('./routes/whatsapp');
 const files = require('./services/files');
+const searchRoutes = require('./routes/search');
+const chatRoutes = require('./routes/chat');
+const callRoutes = require('./routes/calls');
+const notifRoutes = require('./routes/notifications');
+const admx = require('./routes/admin-extra');
+const vehicleCatalog = require('./data/vehicles');
 
 /* ----------------------------- الموجِّه ----------------------------- */
 const routes = [];
@@ -31,6 +38,10 @@ const add = (method, pattern, handler, opts = {}) => routes.push({ method, patte
 
 add('POST', '/api/auth/otp/request', authRoutes.requestOtp, { auth: false });
 add('POST', '/api/auth/otp/verify',  authRoutes.verifyOtp,  { auth: false });
+add('POST', '/api/auth/wa/start',    authRoutes.waStart,    { auth: false });
+add('POST', '/api/auth/wa/check',    authRoutes.waCheck,    { auth: false });
+add('GET',  '/api/whatsapp/webhook', waRoutes.verify,       { auth: false });
+add('POST', '/api/whatsapp/webhook', waRoutes.receive,      { auth: false });
 add('POST', '/api/auth/refresh',     authRoutes.refresh,    { auth: false });
 add('POST', '/api/auth/logout',      authRoutes.logout,     { auth: false });
 
@@ -42,6 +53,35 @@ add('DELETE','/api/me/photo',        profileRoutes.removePhoto);
 add('GET',  '/api/places',           placesRoutes.list);
 add('POST', '/api/places',           placesRoutes.save);
 add('DELETE','/api/places/:id',      placesRoutes.remove);
+add('GET',  '/api/search/places',    searchRoutes.search);
+add('GET',  '/api/vehicle-catalog',  (req, res) => ok(res, vehicleCatalog.catalog), { auth: false });
+add('GET',  '/api/class-images',     admx.classImages);
+
+// المحادثات (الزبون والكابتن)
+add('GET',  '/api/chat/threads',          chatRoutes.list);
+add('GET',  '/api/chat/unread',           chatRoutes.unread);
+add('GET',  '/api/chat/trips/:tripId',    chatRoutes.tripChat);
+add('POST', '/api/chat/support',          chatRoutes.support);
+add('GET',  '/api/chat/threads/:id',      chatRoutes.get);
+add('POST', '/api/chat/threads/:id/messages', chatRoutes.send);
+
+// المكالمات داخل التطبيق
+add('GET',  '/api/calls/ice',             callRoutes.iceConfig);
+add('GET',  '/api/calls/incoming',        callRoutes.incoming);
+add('POST', '/api/calls',                 callRoutes.startCall);
+add('GET',  '/api/calls/:id',             callRoutes.getCall);
+add('POST', '/api/calls/:id/signal',      callRoutes.postSignal);
+add('POST', '/api/calls/:id/accept',      callRoutes.acceptCall);
+add('POST', '/api/calls/:id/end',         callRoutes.endCall);
+
+// الإشعارات
+add('GET',  '/api/notifications',         notifRoutes.list);
+add('POST', '/api/notifications/read',    notifRoutes.markRead);
+add('GET',  '/api/push/key',              notifRoutes.key, { auth: false });
+add('POST', '/api/push/subscribe',        notifRoutes.subscribe);
+add('POST', '/api/push/register',         notifRoutes.register);
+add('POST', '/api/push/unsubscribe',      notifRoutes.unsubscribe);
+add('POST', '/api/push/test',             notifRoutes.test);
 
 add('GET',  '/api/vehicle-types',    tripRoutes.vehicleTypes, { auth: false });
 add('GET',  '/api/captains/nearby',  captainRoutes.nearby);
@@ -99,6 +139,27 @@ add('GET',  '/api/admin/audit',                  adm.auditList);
 add('GET',  '/api/admin/whatsapp',               adm.whatsappStatus);
 add('POST', '/api/admin/whatsapp/template',      adm.whatsappTemplate);
 add('POST', '/api/admin/whatsapp/test',          adm.whatsappTest);
+add('POST', '/api/admin/whatsapp/subscribe',     adm.whatsappSubscribe);
+add('POST', '/api/admin/sms/test',               adm.smsTest);
+add('POST', '/api/admin/whatsapp/secret',        adm.whatsappSecret);
+add('POST', '/api/admin/auth-mode',              adm.authModeUpdate);
+add('GET',  '/api/admin/chats',                  admx.chats);
+add('GET',  '/api/admin/chats/badge',            admx.chatsBadge);
+add('POST', '/api/admin/chats/start',            admx.chatStart);
+add('GET',  '/api/admin/chats/:id',              admx.chatGet);
+add('POST', '/api/admin/chats/:id/messages',     admx.chatSend);
+add('POST', '/api/admin/chats/:id/status',       admx.chatStatus);
+add('GET',  '/api/admin/broadcasts',             admx.broadcasts);
+add('POST', '/api/admin/broadcasts',             admx.broadcastSend);
+add('GET',  '/api/admin/pois',                   admx.pois);
+add('POST', '/api/admin/pois',                   admx.poiSave);
+add('PATCH','/api/admin/pois/:id',               admx.poiSave);
+add('DELETE','/api/admin/pois/:id',              admx.poiDelete);
+add('GET',  '/api/admin/alerts',                 admx.alerts);
+add('POST', '/api/admin/alerts/read',            admx.alertsRead);
+add('GET',  '/api/admin/car-images',             admx.carImages);
+add('POST', '/api/admin/car-images',             admx.carImageSave);
+add('DELETE','/api/admin/car-images/:id',        admx.carImageDelete);
 add('POST', '/api/trips/estimate',   tripRoutes.estimate);
 add('POST', '/api/trips',            tripRoutes.create);
 add('GET',  '/api/trips/active',     tripRoutes.active);
@@ -107,6 +168,8 @@ add('GET',  '/api/trips/:id',        tripRoutes.get);
 add('GET',  '/api/trips/:id/cancel-preview', tripRoutes.cancelPreview);
 add('POST', '/api/trips/:id/cancel', tripRoutes.cancel);
 add('POST', '/api/trips/:id/rate',   tripRoutes.rate);
+add('POST', '/api/trips/:id/rider-location', tripRoutes.riderLocation);
+add('PATCH','/api/captain/vehicle',  cap.updateVehicle);
 
 function match(method, pathname) {
   for (const r of routes) {
@@ -166,6 +229,7 @@ function serveStatic(req, res, pathname) {
       return false;
     }
   }
+  if (rel === '/privacy') return serveFile(res, path.join(PUBLIC_DIR, 'privacy.html'));
   // تطبيق صفحة واحدة: أي مسار غير معروف يعيد index.html
   if (!rel.startsWith('/api') && !path.extname(rel)) return serveFile(res, path.join(PUBLIC_DIR, 'index.html'));
   return false;
@@ -185,10 +249,13 @@ const server = http.createServer(async (req, res) => {
       return ok(res, { status: 'up', driver: db.driver, env: config.NODE_ENV, time: new Date().toISOString() });
     }
     if (pathname === '/api/config') {
+      const mode = await require('./services/authmode').mode();
       return ok(res, {
-        maps: { tilesUrl: config.maps.tilesUrl, tilesUrlDark: config.maps.tilesUrlDark, geocoderUrl: config.maps.geocoderUrl, routingUrl: config.maps.routingUrl },
-        smsProvider: config.sms.provider,
-        devMode: config.sms.provider === 'dev' && config.sms.showDevCode,
+        maps: { ...(await require('./services/maps').tiles()), geocoderUrl: config.maps.geocoderUrl, routingUrl: config.maps.routingUrl },
+        smsProvider: mode,
+        loginMode: mode === 'whatsapp_link' ? 'wa_link' : 'otp',
+        smsFallback: mode === 'whatsapp_link' && Boolean(config.sms.fallback),
+        devMode: mode === 'dev' && config.sms.showDevCode,
         currency: 'JOD',
       });
     }
@@ -203,7 +270,7 @@ const server = http.createServer(async (req, res) => {
       const ctx = { ip, user: null };
       if (m.route.auth) ctx.user = await authService.authenticate(req);
 
-      await m.route.handler(req, res, ctx, m.params);
+      await m.route.handler(req, res, ctx, m.params, url);
       log.debug('طلب', { method: req.method, path: pathname, ms: Date.now() - started });
       return;
     }
