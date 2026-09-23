@@ -131,6 +131,12 @@ async function sendBatch(trip) {
       [uuid(), trip.id, c.id, c.score, c.etaS, c.distanceM, now, expires]
     );
     await db.query('UPDATE captains SET offers_sent = offers_sent + 1 WHERE id = $1', [c.id]);
+    // إشعار فوري للكابتن حتى لو الشاشة مطفية أو التطبيق بالخلفية
+    const cu = await db.one('SELECT user_id FROM captains WHERE id = $1', [c.id]);
+    if (cu) require('./notify').fire(cu.user_id, 'captain', {
+      type: 'offer', title: 'طلب رحلة جديد 🚗', body: `على بعد ${Math.max(1, Math.round((c.etaS || 0) / 60))} د · افتح التطبيق واقبل بسرعة`,
+      url: '/captain/', tag: 'offer', inbox: false, data: { tripId: trip.id },
+    });
   }
   log.info('دفعة عروض', { tripId: trip.id, count: chosen.length, radiusM });
   return { sent: chosen.length, radiusM };
