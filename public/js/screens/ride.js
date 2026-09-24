@@ -111,6 +111,7 @@ window.Screens = window.Screens || {};
           destLat: App.destination.lat, destLng: App.destination.lng,
           destAddress: App.destination.label || App.destination.address,
           vehicleTypeId: chosen.vehicleTypeId, paymentMethod: 'CASH',
+          pickupAccuracy: App.pickup.accuracy, pickupNote: App.pickup.note || undefined,
         });
         show(Screens.tripLive(res.trip));
       } catch (e) {
@@ -134,6 +135,7 @@ window.Screens = window.Screens || {};
       </section>`);
 
     let map, captainMarker = null, searchPulse = null, poll = null, current = trip;
+    let routeEta = null, routeEtaAt = 0, routeBusy = false, lastUnread = -1, watchId = null, lastSent = 0, tick = 0;
 
     node.querySelector('[data-back]').onclick = () => { stop(); App.go('home'); };
     const stop = () => { if (poll) clearInterval(poll); poll = null; };
@@ -183,6 +185,9 @@ window.Screens = window.Screens || {};
     }
 
     render(current);
+    syncRiderShare();
+    CallKit.watch();                       // مكالمة واردة من الكابتن
+    UI.onLeave(node, () => CallKit.unwatch());
     poll = setInterval(refresh, 3000);
 
     async function refresh() {
@@ -199,6 +204,9 @@ window.Screens = window.Screens || {};
         if (prev !== 'DRIVER_ARRIVED' && current.status === 'DRIVER_ARRIVED' && navigator.vibrate) navigator.vibrate([200, 100, 200]);
         if (current.status !== prev) render(current);
         else updateTimer();
+        syncRiderShare();
+        refineEta();
+        if (++tick % 2 === 0) syncChatBadge();
         if (current.isFinal) {
           stop();
           if (current.status === 'TRIP_COMPLETED') show(Screens.rateTrip(current));
@@ -213,6 +221,8 @@ window.Screens = window.Screens || {};
     function updateTimer() {
       const t = node.querySelector('[data-elapsed]');
       if (t) t.textContent = String(Math.max(0, current.searchElapsedSec + 0));
+      const e = node.querySelector('[data-eta]');
+      if (e) e.innerHTML = etaHtml(current);
     }
 
     function render(t) {
@@ -266,43 +276,117 @@ window.Screens = window.Screens || {};
 
       // كابتن مُسند: الرحلة جارية
       const c = t.captain || {};
+      const v = c.vehicle;
       panel.innerHTML = `
         <div class="sheet__grip"></div>
-        <div class="row" style="margin-bottom:var(--s-4)">
+        <div class="row" style="margin-bottom:var(--s-3)">
           <span class="chip chip--brand">${esc(t.statusLabel)}</span>
           <div class="spacer"></div>
           <span class="sm muted-3 num">${esc(t.code)}</span>
         </div>
-        <div class="row" style="margin-bottom:var(--s-4)">
+        <div class="eta" data-eta>${etaHtml(t)}</div>
+        ${t.status === 'DRIVER_ARRIVED' ? `<div class="card" style="background:var(--success-100);border-color:transparent;margin-bottom:var(--s-3);padding:var(--s-3) var(--s-4)">
+          <div class="row sm bold" style="color:var(--success-500)">${Icon('checkCircle', 18)} الكابتن وصل وبانتظارك — اطلع لعنده</div></div>` : ''}
+
+        ${v ? `<button class="car-row" data-car>
+          ${CarArt.image(v, 'car-art--sm')}
+          <span class="grow" style="min-width:0;text-align:start">
+            <span class="bold" style="display:block">${esc(v.label || '')}</span>
+            <span class="sm muted" style="display:block"><span class="num">${esc(v.year || '')}</span>${v.year ? ' | ' : ''}${esc(v.color || '')}</span>
+          </span>
+          <span class="plate plate--sm num">${esc(v.plate || '')}</span>
+        </button>` : ''}
+
+        <div class="row" style="margin:var(--s-3) 0">
           ${UI.avatar({ name: c.name, photoUrl: c.photoUrl }, 'avatar--md')}
           <div class="grow" style="min-width:0">
             <div class="bold">${esc(c.name || 'الكابتن')}</div>
-            <div class="sm muted-3">
-              ${c.rating ? `<span class="num">${c.rating}</span> ★ · ` : ''}
-              ${c.vehicle ? esc([c.vehicle.color, c.vehicle.make, c.vehicle.model].filter(Boolean).join(' ')) : ''}
-            </div>
+            <div class="sm muted-3">${c.rating ? `<span class="num">${c.rating}</span> ★` : 'كابتن جديد'}${c.tripsCompleted ? ` · <span class="num">${c.tripsCompleted}</span> رحلة` : ''}</div>
           </div>
-          ${c.vehicle ? `<span class="chip num">${esc(c.vehicle.plate)}</span>` : ''}
         </div>
-        ${t.status === 'DRIVER_ARRIVED' ? `<div class="card" style="background:var(--success-100);border-color:transparent;margin-bottom:var(--s-4);padding:var(--s-3) var(--s-4)">
-          <div class="row sm bold" style="color:var(--success-500)">${Icon('checkCircle', 18)} الكابتن وصل وبانتظارك — اطلع لعنده</div></div>` : ''}
-        <div class="row" style="gap:var(--s-2);margin-bottom:var(--s-4)">
-          ${c.phone ? `<a class="btn btn--ghost" href="tel:${esc(c.phone)}">${Icon('phone', 18)} اتصال</a>` : ''}
-          <button class="btn btn--ghost" data-share>${Icon('share', 18)} شارك الرحلة</button>
+
+        <div class="row" style="gap:var(--s-2);margin-bottom:var(--s-2)">
+          <button class="btn btn--ghost has-badge" data-chat>${Icon('chat', 18)} رسالة<span data-chat-badge></span></button>
+          <button class="btn btn--ghost" data-call>${Icon('phone', 18)} مكالمة</button>
+          <button class="btn btn--ghost" data-share>${Icon('share', 18)}</button>
+        </div>
+        <div class="row" style="justify-content:center;margin-bottom:var(--s-3)">
+          <span class="xs muted-3">المكالمة عبر الإنترنت وبدون رصيد</span>
+          ${c.phone ? `<a class="xs" style="color:var(--text-3);margin-inline-start:10px" href="tel:${esc(c.phone)}">اتصال عادي</a>` : ''}
         </div>
         <div class="row sm muted" style="justify-content:space-between;padding-block:var(--s-3);border-top:1px solid var(--border)">
           <span>الأجرة المتوقعة</span>
           <span class="bold" style="color:var(--text)"><span class="num">${esc(t.fareText)}</span> د.أ · كاش</span>
         </div>
-        ${t.status !== 'TRIP_STARTED' ? '<button class="btn btn--danger" data-cancel>إلغاء الرحلة</button>' : ''}`;
+        ${t.status !== 'TRIP_STARTED' ? '<button class="btn btn--danger" data-cancel>إلغاء الرحلة</button>' : ''}
+        <button class="link-btn" data-report>${Icon('flag', 15)} إبلاغ عن الكابتن</button>`;
       wireCancel(panel);
+      const back = () => show(Screens.tripLive(current));
+      panel.querySelector('[data-call]').onclick = () => CallKit.start({ tripId: t.id, as: 'customer' });
+      panel.querySelector('[data-chat]').onclick = () => { stop(); show(Inbox.tripChat({ tripId: t.id, as: 'customer', peerName: (c.name || '').split(' ')[0], back })); };
+      panel.querySelector('[data-report]').onclick = () => { stop(); show(Inbox.supportNew({ topic: 'report_captain', trip: { id: t.id, code: t.code, destAddress: t.destination.address }, back })); };
+      const carBtn = panel.querySelector('[data-car]');
+      if (carBtn) carBtn.onclick = () => {
+        const sh = UI.sheet(`${CarArt.card(v)}<p class="sm muted-3" style="text-align:center;margin:var(--s-4) 0 var(--s-3)">تأكد من اللوحة قبل ما تركب</p>
+          <button class="btn btn--primary" data-ok>تمام</button>`);
+        sh.node.querySelector('[data-ok]').onclick = sh.close;
+      };
+      syncChatBadge();
       const shareBtn = panel.querySelector('[data-share]');
       if (shareBtn) shareBtn.onclick = async () => {
-        const text = `أنا برحلة نشمي ${t.code}. الكابتن ${c.name || ''}${c.vehicle ? ' - ' + c.vehicle.plate : ''}`;
+        const text = `أنا برحلة نشمي ${t.code}. الكابتن ${c.name || ''}${v ? ` - ${v.label} ${v.color || ''} - ${v.plate}` : ''}`;
         if (navigator.share) { try { await navigator.share({ title: 'رحلتي مع نشمي', text }); } catch {} }
         else { try { await navigator.clipboard.writeText(text); toast('تم نسخ تفاصيل الرحلة', 'success'); } catch { toast('تعذّرت المشاركة'); } }
       };
     }
+
+    /* الوقت المتوقع: من الخادم فوراً، وبنحسّنه من خط الطريق الحقيقي كل 30 ثانية */
+    function etaHtml(t) {
+      const e = t.eta;
+      if (!e) return t.status === 'DRIVER_ARRIVED' ? '' : '<span class="muted sm">جاري حساب الوقت…</span>';
+      const secs = routeEta && Date.now() - routeEtaAt < 60000 ? routeEta.seconds : e.seconds;
+      const meters = routeEta && Date.now() - routeEtaAt < 60000 ? routeEta.meters : e.distanceM;
+      const min = Math.max(1, Math.round(secs / 60));
+      const dist = meters < 1000 ? `<span class="num">${Math.round(meters / 10) * 10}</span> م` : `<span class="num">${(meters / 1000).toFixed(1)}</span> كم`;
+      const stale = t.captain && t.captain.location && t.captain.location.ageSec > 45;
+      return e.target === 'destination'
+        ? `<span class="eta__big num">${min}</span><span class="eta__txt">دقيقة للوصول لوجهتك · ${dist}</span>`
+        : `<span class="eta__big num">${min}</span><span class="eta__txt">دقيقة ويوصلك الكابتن · ${dist}${stale ? '<br><span class="xs muted-3">آخر تحديث لموقعه قبل شوي</span>' : ''}</span>`;
+    }
+    async function refineEta() {
+      const t = current, loc = t.captain && t.captain.location;
+      if (!t.eta || !loc || routeBusy || Date.now() - routeEtaAt < 30000) return;
+      routeBusy = true;
+      try {
+        const to = t.eta.target === 'destination' ? t.destination : t.pickup;
+        const r = await MapKit.routeInfo(loc, to);
+        if (r) { routeEta = { seconds: r.durationS, meters: r.distanceM }; routeEtaAt = Date.now(); }
+      } finally { routeBusy = false; }
+    }
+
+    /* رسائل الكابتن الجديدة */
+    async function syncChatBadge() {
+      const b = node.querySelector('[data-chat-badge]');
+      if (!b) return;
+      const c = await Inbox.counts('customer');
+      const n = (c.trips || {})[current.id] || 0;
+      if (n > lastUnread && lastUnread >= 0) { toast('رسالة جديدة من الكابتن'); if (navigator.vibrate) navigator.vibrate(120); }
+      lastUnread = n;
+      b.innerHTML = ChatUI.badge(n);
+    }
+
+    /* مشاركة موقعي المباشر مع الكابتن وأنا بستناه — عشان يوصل لعندي بالضبط */
+    function syncRiderShare() {
+      const on = ['DRIVER_ACCEPTED', 'DRIVER_ARRIVING', 'DRIVER_ARRIVED'].includes(current.status);
+      if (on && watchId === null && navigator.geolocation) {
+        watchId = navigator.geolocation.watchPosition((p) => {
+          if (Date.now() - lastSent < 8000 || p.coords.accuracy > 60) return;
+          lastSent = Date.now();
+          API.riderLocation(current.id, { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: Math.round(p.coords.accuracy) }).catch(() => {});
+        }, () => {}, { enableHighAccuracy: true, maximumAge: 5000 });
+      } else if (!on && watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+    }
+    UI.onLeave(node, () => { if (watchId !== null) navigator.geolocation.clearWatch(watchId); });
 
     function wireCancel(panel) {
       const btn = panel.querySelector('[data-cancel]');
