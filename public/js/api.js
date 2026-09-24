@@ -60,7 +60,7 @@ window.API = (function () {
     del:   (p, o)    => raw(p, { ...o, method: 'DELETE' }),
 
     config:        ()   => raw('/api/config', { auth: false }),
-    requestOtp:    (phone) => raw('/api/auth/otp/request', { method: 'POST', body: { phone }, auth: false }),
+    requestOtp:    (phone, channel) => raw('/api/auth/otp/request', { method: 'POST', body: { phone, channel }, auth: false }),
     verifyOtp:     (phone, code) => raw('/api/auth/otp/verify', { method: 'POST', body: { phone, code }, auth: false }),
     logout:        ()   => raw('/api/auth/logout', { method: 'POST', auth: false }),
     me:            ()   => raw('/api/me'),
@@ -70,6 +70,7 @@ window.API = (function () {
     places:        ()   => raw('/api/places'),
     savePlace:     (b)  => raw('/api/places', { method: 'POST', body: b }),
     deletePlace:   (id) => raw('/api/places/' + id, { method: 'DELETE' }),
+    searchPlaces:  (q, near) => raw(`/api/search/places?q=${encodeURIComponent(q)}${near ? `&lat=${near.lat}&lng=${near.lng}` : ''}`),
     vehicleTypes:  ()   => raw('/api/vehicle-types', { auth: false }),
     nearbyCaptains:(lat, lng) => raw(`/api/captains/nearby?lat=${lat}&lng=${lng}`),
     estimate:      (b)  => raw('/api/trips/estimate', { method: 'POST', body: b }),
@@ -80,11 +81,37 @@ window.API = (function () {
     cancelPreview: (id) => raw('/api/trips/' + id + '/cancel-preview'),
     cancelTrip:    (id, reason) => raw('/api/trips/' + id + '/cancel', { method: 'POST', body: { reason } }),
     rateTrip:      (id, b) => raw('/api/trips/' + id + '/rate', { method: 'POST', body: b }),
+    riderLocation: (id, b) => raw('/api/trips/' + id + '/rider-location', { method: 'POST', body: b }),
+    vehicleCatalog:()   => raw('/api/vehicle-catalog', { auth: false }),
+    classImages:   ()   => raw('/api/class-images'),
+
+    // ----- المحادثات والإشعارات (as = 'customer' | 'captain') -----
+    chat: {
+      threads: (as)          => raw('/api/chat/threads?as=' + (as || 'customer')),
+      unread:  (as)          => raw('/api/chat/unread?as=' + (as || 'customer')),
+      trip:    (tripId, as)  => raw('/api/chat/trips/' + tripId + '?as=' + (as || 'customer')),
+      get:     (id, as, after) => raw('/api/chat/threads/' + id + '?as=' + (as || 'customer') + (after ? '&after=' + encodeURIComponent(after) : '')),
+      send:    (id, body, as)  => raw('/api/chat/threads/' + id + '/messages', { method: 'POST', body: { body, as: as || 'customer' } }),
+      support: (b)           => raw('/api/chat/support', { method: 'POST', body: b }),
+    },
+    call: {
+      ice:      ()            => raw('/api/calls/ice'),
+      start:    (tripId, as)  => raw('/api/calls', { method: 'POST', body: { tripId, as } }),
+      incoming: ()            => raw('/api/calls/incoming'),
+      get:      (id, after)   => raw('/api/calls/' + id + (after ? '?after=' + encodeURIComponent(after) : '')),
+      signal:   (id, kind, payload) => raw('/api/calls/' + id + '/signal', { method: 'POST', body: { kind, payload } }),
+      accept:   (id)          => raw('/api/calls/' + id + '/accept', { method: 'POST', body: {} }),
+      end:      (id, reason)  => raw('/api/calls/' + id + '/end', { method: 'POST', body: { reason } }),
+    },
+    notifications: (app)     => raw('/api/notifications?app=' + (app || 'customer')),
+    readNotifications: (app) => raw('/api/notifications/read', { method: 'POST', body: { app: app || 'customer' } }),
+    pushTest:      (app)     => raw('/api/push/test', { method: 'POST', body: { app: app || 'customer' } }),
 
     // ----- تطبيق الكابتن -----
     cap: {
       me:        ()        => raw('/api/captain/me'),
       register:  (b)       => raw('/api/captain/register', { method: 'POST', body: b }),
+      vehicle:   (b)       => raw('/api/captain/vehicle', { method: 'PATCH', body: b }),
       document:  (kind, dataUrl) => raw('/api/captain/documents', { method: 'POST', body: { kind, dataUrl } }),
       goal:      (goalFils) => raw('/api/captain/goal', { method: 'PATCH', body: { goalFils } }),
       online:    (online)  => raw('/api/captain/online', { method: 'POST', body: { online } }),
