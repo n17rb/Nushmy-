@@ -48,6 +48,7 @@ window.Icon = (function () {
     upload:   '<path d="M12 16V4.5M7.5 9L12 4.5 16.5 9"/><path d="M4.5 15.5v2.5a1.5 1.5 0 001.5 1.5h12a1.5 1.5 0 001.5-1.5v-2.5"/>',
     doc:      '<path d="M7 3.5h7l4 4V19a1.5 1.5 0 01-1.5 1.5h-9.5A1.5 1.5 0 015.5 19V5A1.5 1.5 0 017 3.5z"/><path d="M13.5 3.5V8H18M9 12.5h6M9 16h6"/>',
     chart:    '<path d="M4.5 19.5h15"/><path d="M7.5 16v-4M12 16V8M16.5 16v-6"/>',
+    mic:      '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/>',
     swap:     '<path d="M7 7h11l-3-3M17 17H6l3 3"/>',
   };
 
