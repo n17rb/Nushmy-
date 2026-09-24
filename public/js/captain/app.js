@@ -22,7 +22,22 @@ window.App = (function () {
     else { CapKit.Location.stop(); CapKit.Awake.off(); }
   }
 
+  /** روابط الإشعارات: #notifications · #support/<id> · #chat */
+  function openLink(url) {
+    const hash = String(url || '').split('#')[1] || '';
+    if (!hash || !state.cap || !state.cap.captain) return false;
+    history.replaceState(null, '', location.pathname);
+    const home = () => go('home');
+    if (hash === 'notifications') { UI.show(Inbox.notifications({ as: 'captain', back: home })); return true; }
+    if (hash.startsWith('support/')) { UI.show(Inbox.supportThread({ id: hash.slice(8), as: 'captain', back: home })); return true; }
+    return false;
+  }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') openLink(e.data.url); });
+  }
+
   /** يقرر الشاشة الصحيحة حسب حالة الكابتن */
+  let pushChecked = false;
   async function go(route) {
     if (route === 'welcome') return UI.show(CapScreens.welcome());
     if (route === 'phone') return UI.show(Screens.phone());
@@ -34,6 +49,7 @@ window.App = (function () {
       return;
     }
     if (!me.captain) return UI.show(CapScreens.register());
+    if (!pushChecked) { pushChecked = true; PushKit.refresh(); }
     if (me.captain.status !== 'APPROVED') return UI.show(CapScreens.pending(me));
     try {
       const { trip } = await API.cap.activeTrip();
@@ -66,10 +82,8 @@ window.App = (function () {
   const bootStartedAt = performance.now();
 
   async function boot() {
-    // الكابتن يشتغل غالباً بالليل: الوضع الداكن افتراضي إلا إذا اختار غيره
-    let pref = UI.getTheme();
-    try { if (!localStorage.getItem('nashmi.theme')) pref = 'dark'; } catch {}
-    UI.applyTheme(pref);
+    // بيفتح فاتح دايماً، والكابتن بيحوّله للداكن من حسابه إذا بده
+    UI.applyTheme(UI.getTheme());
 
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
     try { state.config = await API.config(); MapKit.configure(state.config.maps || {}); } catch {}
@@ -90,7 +104,9 @@ window.App = (function () {
     };
 
     if (!authed) { UI.show(CapScreens.welcome()); reveal(); return; }
+    const link = location.href;
     await go('home');
+    openLink(link);
     reveal();
   }
 
