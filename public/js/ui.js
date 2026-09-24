@@ -76,19 +76,20 @@ window.UI = (function () {
   const THEME_KEY = 'nashmi.theme';
   const media = window.matchMedia('(prefers-color-scheme: dark)');
 
+  // التطبيق بيفتح دايماً فاتح (أبيض)، والمستخدم بيقدر يحوّله للداكن من حسابه
   function applyTheme(pref) {
-    const mode = pref === 'system' || !pref ? (media.matches ? 'dark' : 'light') : pref;
+    const mode = pref === 'system' ? (media.matches ? 'dark' : 'light') : (pref === 'dark' ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme', mode);
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', mode === 'dark' ? '#0C0D10' : '#A60E35');
-    document.documentElement.dataset.themePref = pref || 'system';
+    document.documentElement.dataset.themePref = pref || 'light';
   }
   function setTheme(pref) {
     try { localStorage.setItem(THEME_KEY, pref); } catch {}
     applyTheme(pref);
   }
   function getTheme() {
-    try { return localStorage.getItem(THEME_KEY) || 'system'; } catch { return 'system'; }
+    try { return localStorage.getItem(THEME_KEY) || 'light'; } catch { return 'light'; }
   }
   media.addEventListener('change', () => { if (getTheme() === 'system') applyTheme('system'); });
 
