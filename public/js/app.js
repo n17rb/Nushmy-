@@ -10,7 +10,25 @@ window.App = (function () {
 
   function setUser(u) { state.user = u; }
 
+  /** روابط الإشعارات: #notifications · #support/<id> · #chat */
+  function openLink(url) {
+    const hash = String(url || '').split('#')[1] || '';
+    if (!hash || !state.user) return false;
+    history.replaceState(null, '', location.pathname);
+    const home = () => go('home');
+    if (hash === 'notifications') { UI.show(Screens.notifications()); return true; }
+    if (hash.startsWith('support/')) { UI.show(Inbox.supportThread({ id: hash.slice(8), as: 'customer', back: home })); return true; }
+    if (hash === 'support') { UI.show(Screens.support()); return true; }
+    if (hash === 'chat') { home(); return true; }
+    return false;
+  }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') openLink(e.data.url); });
+  }
+
+  let pushChecked = false;
   async function go(route) {
+    if (route === 'home' && !pushChecked && state.user) { pushChecked = true; PushKit.refresh(); }
     if (route === 'home') {
       // إن كانت هناك رحلة نشطة نعود إليها مباشرة بدل الرئيسية
       try {
@@ -69,7 +87,8 @@ window.App = (function () {
       if (authed) {
         const { user } = await API.me();
         setUser(user);
-        if (user.theme && user.theme !== UI.getTheme()) UI.setTheme(user.theme);
+        // المظهر المحفوظ بالحساب بيتطبّق بس إذا المستخدم اختار فاتح/داكن بنفسه
+        if ((user.theme === 'light' || user.theme === 'dark') && user.theme !== UI.getTheme()) UI.setTheme(user.theme);
       }
     } catch { authed = false; }
 
@@ -85,7 +104,7 @@ window.App = (function () {
 
     if (!authed) { await go('welcome'); reveal(); return; }
     if (!state.user.profileComplete) { UI.show(Screens.completeProfile()); reveal(); return; }
-    await go('home');
+    if (!openLink(location.href)) await go('home');
     reveal();
   }
 
