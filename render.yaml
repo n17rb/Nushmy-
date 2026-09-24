@@ -20,6 +20,18 @@ services:
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID
         sync: false
+      - key: WHATSAPP_WABA_ID
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: SMS_FALLBACK            # android = رسائل SMS من تلفون أندرويد برقمك
+        sync: false
+      - key: SMSGATE_USERNAME
+        sync: false
+      - key: SMSGATE_PASSWORD
+        sync: false
       - key: WHATSAPP_TEMPLATE
         value: nashmi_otp
       - key: OTP_DEV_SHOW   # للمعاينة فقط — احذفه قبل الإطلاق
