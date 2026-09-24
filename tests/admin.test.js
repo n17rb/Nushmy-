@@ -227,3 +227,22 @@ test('المالك ما بتنشال صلاحيته', async () => {
   const self = await call(`/api/admin/admins/${me.id}`, { method: 'DELETE', token: owner });
   assert.equal(self.status, 400);
 });
+
+test('التحقق من الرقم: حفظ App Secret، وما بينعرض، وواتساب ما بيتفعّل قبل ما يجهز', async () => {
+  const bad = await call('/api/admin/whatsapp/secret', { method: 'POST', token: owner, body: { appSecret: 'short' } });
+  assert.equal(bad.status, 400);
+  const good = await call('/api/admin/whatsapp/secret', { method: 'POST', token: owner, body: { appSecret: 'a'.repeat(32) } });
+  assert.equal(good.status, 200);
+  assert.equal(await settings.get('wa.app_secret'), 'a'.repeat(32));
+
+  const list = await call('/api/admin/settings', { token: owner });
+  assert.ok(!list.data.settings.some((s) => s.key.startsWith('wa.') || s.key.startsWith('auth.')), 'الأسرار مخفية');
+  const edit = await call('/api/admin/settings/wa.app_secret', { method: 'PATCH', token: owner, body: { value: 'x', reason: 'تجربة' } });
+  assert.equal(edit.status, 404, 'ما بتنعدّل من صفحة الإعدادات');
+
+  const on = await call('/api/admin/auth-mode', { method: 'POST', token: owner, body: { mode: 'whatsapp_link' } });
+  assert.equal(on.status, 400, 'ما بيتفعّل وواتساب مش مجهّز');
+  const dev = await call('/api/admin/auth-mode', { method: 'POST', token: owner, body: { mode: 'dev' } });
+  assert.equal(dev.status, 200);
+  await settings.set('auth.mode', '');
+});
