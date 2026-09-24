@@ -48,7 +48,7 @@ body.admin-app #app {
 
 /* ------------------------------- بطاقات وأرقام ------------------------------- */
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 18px 20px; min-width: 0; }
-.panel__title { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.panel__title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
 .panel__title h2 { font-size: 16px; font-weight: 800; margin: 0; }
 .panel__title .spacer { flex: 1; }
 .panel--flush { padding: 0; }
@@ -181,6 +181,18 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
 .wa-step--bad .wa-mark { background: var(--danger-100); color: var(--danger-500); }
 .wa-step--live .wa-mark { background: var(--brand-100); color: var(--brand-700); }
 .wa-err { margin-top: 10px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--danger-100); color: var(--danger-500); font-size: 13.5px; }
+.wz-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.wz { display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); }
+.wz--done { background: var(--surface-2); }
+.wz__n { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: var(--brand-100); color: var(--brand-700); }
+.wz--done .wz__n { background: var(--success-100); color: var(--success-500); }
+.wz__b { min-width: 0; flex: 1; }
+.wz__b > b { display: block; font-size: 15.5px; margin-bottom: 4px; }
+.wz__b p { margin: 4px 0; font-size: 13.5px; color: var(--text-2); line-height: 1.7; }
+.wa-group { font-size: 13px; font-weight: 800; color: var(--text-3); margin: 18px 0 8px; }
+.wa-group:first-of-type { margin-top: 4px; }
+.wa-copy { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.wa-copy code { direction: ltr; unicode-bidi: isolate; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; overflow-wrap: anywhere; max-width: 100%; }
 .wa-ok { margin-top: 10px; padding: 10px 12px; border-radius: var(--r-sm); background: var(--success-100); color: var(--success-500); font-size: 13.5px; font-weight: 700; }
 
 /* ------------------------------- الدخول ------------------------------- */
@@ -201,3 +213,84 @@ table.t { width: 100%; border-collapse: collapse; font-size: 14px; }
   .kpi__value { font-size: 22px; }
 }
 @media (prefers-reduced-motion: reduce) { .side { transition: none; } }
+
+/* ================= المحادثات ================= */
+.inbox { display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.inbox__list { max-height: calc(100vh - 220px); overflow-y: auto; }
+.inbox__row { display: flex; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); color: inherit; text-decoration: none; align-items: flex-start; }
+.inbox__row:hover { background: var(--surface-2); }
+.inbox__row.on { background: var(--brand-100); }
+.inbox__row.unread .inbox__row-prev { color: var(--text); font-weight: 700; }
+.inbox__row-body { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.inbox__row-top { display: flex; justify-content: space-between; gap: 8px; }
+.inbox__row-top b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inbox__row-top small { color: var(--text-3); white-space: nowrap; font-size: 11.5px; }
+.inbox__row-mid { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.inbox__row-mid .pill { font-size: 11px; padding: 1px 8px; }
+.inbox__row-prev { font-size: 13px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inbox__row .count { position: static; }
+.inbox__thread { display: flex; flex-direction: column; height: calc(100vh - 220px); min-height: 460px; }
+.inbox__empty { margin: auto; text-align: center; color: var(--text-3); }
+.thread__head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.thread__back { display: none; }
+.thread__trip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 16px; font-size: 13px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.thread__trip .clip { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread__actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border); }
+.thread__msgs { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+.amsg { max-width: 75%; padding: 8px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); align-self: flex-start; }
+.amsg--me { align-self: flex-end; background: var(--brand-600); color: #fff; border-color: transparent; }
+.amsg--sys { align-self: center; background: var(--surface-3); font-size: 13px; }
+.amsg__who { font-size: 11px; font-weight: 800; opacity: .75; }
+.amsg__body { font-size: 14.5px; line-height: 1.55; word-break: break-word; }
+.amsg__time { font-size: 10.5px; opacity: .65; margin-top: 2px; }
+.thread__quick { display: flex; gap: 6px; overflow-x: auto; padding: 8px 16px 0; }
+.thread__quick .chip { flex: none; font-size: 12px; }
+.thread__bar { display: flex; gap: 8px; padding: 10px 16px 14px; align-items: flex-end; }
+.thread__bar textarea { flex: 1; min-height: 52px; padding: 10px; resize: vertical; }
+@media (max-width: 900px) {
+  .inbox { grid-template-columns: minmax(0, 1fr); }
+  .inbox:not(.inbox--open) .inbox__thread { display: none; }
+  .inbox--open .inbox__list { display: none; }
+  .inbox__thread { height: calc(100vh - 170px); }
+  .thread__back { display: grid; }
+}
+
+/* ================= الإشعارات الجماعية ================= */
+.bc-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 800px) { .bc-grid { grid-template-columns: minmax(0, 1fr); } }
+.push-prev { display: flex; gap: 10px; padding: 12px; border-radius: 16px; background: var(--surface-2); box-shadow: var(--shadow-sm); }
+.push-prev img { width: 36px; height: 36px; border-radius: 9px; flex: none; }
+.push-prev b { display: block; font-size: 14px; }
+.push-prev span { font-size: 13px; color: var(--text-2); white-space: pre-line; }
+
+/* ================= الأماكن ================= */
+.map-box { height: 320px; border-radius: var(--r-md); overflow: hidden; position: relative; }
+
+/* ================= صور السيارات ================= */
+.sb-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 800px) { .sb-grid { grid-template-columns: minmax(0, 1fr); } }
+.sb-frame { position: relative; aspect-ratio: 3 / 2; background: #fff; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+.sb-frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.sb-frame-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; font-size: 13px; color: var(--text-3); }
+.sb-guides i { position: absolute; z-index: 2; pointer-events: none; }
+.sb-guides .g-w { inset-block: 0; left: 8%; right: 8%; border-left: 1.5px dashed rgba(229,36,59,.7); border-right: 1.5px dashed rgba(229,36,59,.7); }
+.sb-guides .g-70 { inset-inline: 0; top: 70%; border-top: 1.5px dashed rgba(229,36,59,.5); }
+.sb-guides .g-86 { inset-inline: 0; top: 86%; border-top: 1.5px solid rgba(229,36,59,.7); }
+.sb-list { margin: 0; padding-inline-start: 18px; display: grid; gap: 6px; font-size: 13.5px; line-height: 1.6; }
+.sb-prompt { margin-top: 16px; }
+.sb-prompt summary { cursor: pointer; font-weight: 700; }
+.sb-prompt pre { direction: ltr; text-align: left; white-space: pre-wrap; background: var(--surface-2); padding: 12px; border-radius: 10px; font-size: 12.5px; margin: 10px 0; }
+.sb-upload { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; align-items: start; }
+@media (max-width: 800px) { .sb-upload { grid-template-columns: minmax(0, 1fr); } }
+.car-lib { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.car-lib figure { margin: 0; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+.car-lib .car-art { border-radius: 0; aspect-ratio: 3 / 2; background: #fff; }
+.car-lib .car-art img { width: 100%; height: 100%; object-fit: contain; }
+.car-lib figcaption { display: flex; gap: 8px; align-items: center; padding: 8px 10px; font-size: 13px; }
+.car-lib figcaption span { color: var(--text-3); flex: 1; }
+
+.panel--alert { border-color: #F0DCB4; background: color-mix(in srgb, var(--warning-100) 55%, var(--surface)); }
+.chip--warn { background: var(--warning-100); color: var(--warning-500); }
+.sb-list--wide { columns: 2; column-gap: 28px; }
+@media (max-width: 800px) { .sb-list--wide { columns: 1; } }
+tr.row--new td { background: color-mix(in srgb, var(--brand-600) 5%, transparent); }
