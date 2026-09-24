@@ -14,6 +14,8 @@ window.Screens = window.Screens || {};
           <button class="icon-btn" data-menu aria-label="حسابي">${Icon('menu', 22)}</button>
           <button class="icon-btn" data-notif aria-label="رحلاتي">${Icon('receipt', 20)}</button>
           <div class="spacer"></div>
+          <button class="icon-btn has-badge" data-support aria-label="الدعم الفني">${Icon('chat', 20)}<span data-b-support></span></button>
+          <button class="icon-btn has-badge" data-bell aria-label="الإشعارات">${Icon('bell', 21)}<span data-b-bell></span></button>
         </div>
 
         <div class="dock">
@@ -45,8 +47,16 @@ window.Screens = window.Screens || {};
         </div>
       </section>`);
 
-    let map, meMarker;
+    let map, meMarker, meCircle;
     let current = null;
+    /** نقطتي + دائرة الدقة */
+    function placeMe(p) {
+      if (!map) return;
+      if (meMarker) meMarker.setLatLng([p.lat, p.lng]);
+      else meMarker = L.marker([p.lat, p.lng], { icon: MapKit.meIcon(), interactive: false }).addTo(map);
+      if (meCircle) { meCircle.setLatLng([p.lat, p.lng]); meCircle.setRadius(p.accuracy || 30); }
+      else meCircle = MapKit.accuracyCircle(map, p);
+    }
     const cars = new Map();       // سيارات حقيقية متصلة قريبة (من الخادم)
     let carsTimer = null;
 
@@ -73,11 +83,12 @@ window.Screens = window.Screens || {};
       refreshCars();
       carsTimer = setInterval(refreshCars, 8000);
       try {
-        const pos = await MapKit.locate();
+        // أول قراءة بتنعرض فوراً، وبنضل نحسّن لحد ما الدقة تصير ~15 م
+        let first = true;
+        const pos = await MapKit.locatePrecise({ onUpdate: (p) => { placeMe(p); if (first) { first = false; map.flyTo([p.lat, p.lng], 16, { duration: .9 }); } } });
         current = pos;
         App.pickup = { ...pos, label: 'موقعي الحالي' };
-        meMarker = L.marker([pos.lat, pos.lng], { icon: MapKit.meIcon(), interactive: false }).addTo(map);
-        map.flyTo([pos.lat, pos.lng], 16, { duration: .9 });
+        placeMe(pos);
         refreshCars();
         const rev = await MapKit.reverse(pos.lat, pos.lng);
         if (rev) App.pickup = { ...pos, label: rev.label, address: rev.address };
@@ -89,12 +100,11 @@ window.Screens = window.Screens || {};
 
     node.querySelector('[data-locate]').onclick = async () => {
       try {
-        const pos = await MapKit.locate();
+        const pos = await MapKit.locatePrecise({ onUpdate: placeMe });
         current = pos;
         App.pickup = { ...pos, label: 'موقعي الحالي' };
-        if (meMarker) meMarker.setLatLng([pos.lat, pos.lng]);
-        else meMarker = L.marker([pos.lat, pos.lng], { icon: MapKit.meIcon(), interactive: false }).addTo(map);
-        map.flyTo([pos.lat, pos.lng], 16, { duration: .7 });
+        placeMe(pos);
+        map.flyTo([pos.lat, pos.lng], 17, { duration: .7 });
         const rev = await MapKit.reverse(pos.lat, pos.lng);
         if (rev) App.pickup = { ...pos, label: rev.label, address: rev.address };
       } catch (e) { toast(e.message, 'error'); }
@@ -103,6 +113,22 @@ window.Screens = window.Screens || {};
     node.querySelector('[data-menu]').onclick = () => show(Screens.account());
     node.querySelector('[data-notif]').onclick = () => show(Screens.trips());
     node.querySelector('[data-where]').onclick = () => show(Screens.destination());
+    node.querySelector('[data-bell]').onclick = () => show(Screens.notifications());
+    node.querySelector('[data-support]').onclick = () => show(Screens.support());
+
+    // النقاط الحمراء: إشعارات جديدة ورسائل الدعم
+    let badgeMounted = false;
+    const syncBadges = async () => {
+      if (node.isConnected) badgeMounted = true;
+      else if (badgeMounted) return clearInterval(badgeTimer);
+      else return;
+      const c = await Inbox.counts('customer');
+      node.querySelector('[data-b-bell]').innerHTML = ChatUI.badge(c.notifications);
+      node.querySelector('[data-b-support]').innerHTML = ChatUI.badge(c.support);
+    };
+    const badgeTimer = setInterval(syncBadges, 30000);
+    UI.onLeave(node, () => clearInterval(badgeTimer));
+    setTimeout(syncBadges, 50);
 
     // الأماكن المحفوظة والوجهات الأخيرة
     (async () => {
@@ -183,7 +209,7 @@ window.Screens = window.Screens || {};
                 <div class="muted-3 xs">من</div>
                 <div class="bold" data-from>${esc((App.pickup && App.pickup.label) || 'موقعي الحالي')}</div>
               </div>
-              <input class="input input--box" data-q placeholder="اكتب اسم المكان أو المنطقة" autocomplete="off"
+              <input class="input input--box" data-q placeholder="محل، مطعم، منطقة، شارع…" autocomplete="off"
                      style="min-height:48px;font-weight:600">
             </div>
           </div>
@@ -231,18 +257,21 @@ window.Screens = window.Screens || {};
       timer = setTimeout(async () => {
         try {
           const rows = await MapKit.search(text, App.pickup || MapKit.KARAK);
+          if (q.value.trim() !== text) return;   // المستخدم كمّل كتابة — منتجاهل النتيجة القديمة
           if (!rows.length) {
             results.innerHTML = `<div class="empty"><div class="empty__icon">${Icon('search', 64)}</div>
               <p>ما لقينا نتيجة لـ "${esc(text)}"</p><p class="sm">جرّب اسماً أوضح أو حدد على الخريطة</p></div>`;
             return;
           }
+          const km = (m) => (m < 1000 ? `${Math.max(50, Math.round(m / 50) * 50)} م` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} كم`);
           results.innerHTML = rows.map((r, i) => `
             <button class="list-item" data-i="${i}">
-              <span class="list-item__icon">${Icon('pin', 20)}</span>
+              <span class="list-item__icon ${r.source === 'nashmi' ? 'list-item__icon--brand' : ''}">${Icon(r.category === 'مطلوب قبل' ? 'clock' : 'pin', 20)}</span>
               <span class="list-item__body">
-                <span class="list-item__title">${esc(r.label)}</span>
-                <span class="list-item__sub">${esc(r.address)}</span>
+                <span class="list-item__title">${esc(r.label)}${r.category ? ` <span class="tag">${esc(r.category)}</span>` : ''}</span>
+                <span class="list-item__sub">${esc(r.address || '')}</span>
               </span>
+              ${r.distanceM != null ? `<span class="list-item__end xs muted-3" style="white-space:nowrap">${km(r.distanceM)}</span>` : ''}
             </button>`).join('');
           results.querySelectorAll('[data-i]').forEach((b) => {
             b.onclick = () => choose(rows[Number(b.dataset.i)]);
@@ -339,11 +368,18 @@ window.Screens = window.Screens || {};
               </div>
             </div>
           </div>
+          <div class="acc-hint hidden" data-acc></div>
+          <input class="input" data-note maxlength="120" placeholder="ملاحظة للكابتن (اختياري): قدام الصيدلية، البناية الزرقا…" style="margin-bottom:var(--s-3);min-height:46px;font-size:14px">
           <button class="btn btn--primary" data-confirm>تأكيد الطلب</button>
         </div>
       </section>`);
 
     let map, picked = { ...start };
+    const acc = node.querySelector('[data-acc]');
+    if (start.accuracy && start.accuracy > 25) {
+      acc.innerHTML = `${Icon('crosshair', 16)} موقعك تقريبي (±${Math.round(start.accuracy)} م) — حرّك الخريطة وحط الدبوس على مكانك بالضبط`;
+      acc.classList.remove('hidden');
+    }
     const labelEl = node.querySelector('[data-label]');
     node.querySelector('[data-back]').onclick = () => show(Screens.destination());
 
@@ -352,11 +388,16 @@ window.Screens = window.Screens || {};
     node.querySelector('[data-pin-slot]').replaceWith(pin.node);
 
     setTimeout(() => {
-      map = MapKit.create(node.querySelector('#cpMap'), { center: start, zoom: 17.5 });
+      map = MapKit.create(node.querySelector('#cpMap'), { center: start, zoom: 18.5 });
       if (App.destination) {
         L.marker([App.destination.lat, App.destination.lng], { icon: MapKit.destIcon(), interactive: false }).addTo(map);
       }
+      if (start.accuracy) MapKit.accuracyCircle(map, start);
+      let moved = false;
       MapKit.bindCenterPin(map, pin, async (c) => {
+        // الزبون حرّك الدبوس بنفسه ← المكان مؤكد (دقة الدبوس نفسه ~5 م)
+        if (moved) { picked.accuracy = 5; acc.classList.add('hidden'); }
+        moved = true;
         picked.lat = c.lat; picked.lng = c.lng;
         const rev = await MapKit.reverse(c.lat, c.lng);
         picked.label = (rev && rev.label) || 'موقع محدد';
@@ -366,6 +407,7 @@ window.Screens = window.Screens || {};
     }, 30);
 
     node.querySelector('[data-confirm]').onclick = () => {
+      picked.note = node.querySelector('[data-note]').value.trim();
       App.pickup = picked;
       show(Screens.rideOptions());
     };
