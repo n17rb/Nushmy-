@@ -11,12 +11,16 @@ window.MapKit = (function () {
   let cfg = {
     tilesUrl: '',
     tilesUrlDark: '',
+    tilesStyle: 'osm',
+    attribution: '&copy; OpenStreetMap',
     geocoderUrl: 'https://nominatim.openstreetmap.org',
+    photonUrl: 'https://photon.komoot.io',
     routingUrl: 'https://router.project-osrm.org',
   };
   const KARAK = { lat: 31.1850, lng: 35.7047 };
-  const DEFAULT_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-  const DEFAULT_DARK  = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  // بدون مفتاح: OpenStreetMap (CARTO صارت تطلب مفتاح وتكتب «API KEY REQUIRED» على الخريطة)
+  const DEFAULT_LIGHT = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  const DEFAULT_DARK  = DEFAULT_LIGHT;
 
   const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const isDark = () => document.documentElement.getAttribute('data-theme') === 'dark';
@@ -38,14 +42,16 @@ window.MapKit = (function () {
       doubleClickZoom: interactive, touchZoom: interactive, boxZoom: false, keyboard: interactive,
       fadeAnimation: true, zoomAnimation: true, markerZoomAnimation: true,
     });
-    node.classList.add('map--uber');
+    node.classList.add('map--uber', 'tiles--' + (cfg.tilesStyle || 'osm'));
 
     const layer = L.tileLayer(tileUrl(), {
-      maxZoom: 19, subdomains: 'abcd', detectRetina: true, className: 'map-tiles',
+      maxZoom: 19, maxNativeZoom: 19, subdomains: 'abcd', className: 'map-tiles',
+      // OSM ما عندها بلاطات Retina؛ منطلب زوم أعلى بدرجة على الشاشات الحادة حتى تضل الكتابة واضحة
+      detectRetina: cfg.tilesStyle !== 'osm',
     }).addTo(map);
 
     L.control.attribution({ position: 'topleft', prefix: false })
-      .addAttribution('&copy; OpenStreetMap &copy; CARTO')
+      .addAttribution(cfg.attribution || '&copy; OpenStreetMap')
       .addTo(map);
 
     // تبديل الخريطة مع الوضع الليلي فوراً
@@ -269,16 +275,160 @@ window.MapKit = (function () {
     });
   }
 
-  async function search(q) {
-    const url = `${cfg.geocoderUrl}/search?format=jsonv2&accept-language=ar&limit=8&countrycodes=jo&q=${encodeURIComponent(q)}`;
-    const res = await fetch(url, { headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new Error('تعذّر البحث عن العنوان حالياً');
-    const rows = await res.json();
-    return rows.map((r) => ({
-      label: (r.name || r.display_name.split(',')[0]).trim(),
-      address: r.display_name,
-      lat: Number(r.lat), lng: Number(r.lon),
+  /**
+   * تحديد موقع دقيق: بنراقب GPS لعدة ثواني وبناخذ أدق قراءة (أول قراءة غالباً من الشبكة وبتكون بعيدة 50–500 م).
+   * بيوقف أول ما توصل الدقة لـ `goodM` متر أو بعد `maxMs`.
+   * @returns {Promise<{lat,lng,accuracy}>}
+   */
+  function locatePrecise({ goodM = 15, maxMs = 7000, onUpdate } = {}) {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error('المتصفح لا يدعم تحديد الموقع'));
+      let best = null, done = false;
+      const finish = () => {
+        if (done) return; done = true;
+        navigator.geolocation.clearWatch(id); clearTimeout(t);
+        best ? resolve(best) : reject(new Error('تعذّر تحديد موقعك بدقة. فعّل الـ GPS وجرّب'));
+      };
+      const id = navigator.geolocation.watchPosition((p) => {
+        const r = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: Math.round(p.coords.accuracy), heading: p.coords.heading };
+        if (!best || r.accuracy <= best.accuracy) { best = r; onUpdate && onUpdate(r); }
+        if (r.accuracy <= goodM) finish();
+      }, (err) => {
+        if (best) return finish();
+        done = true; navigator.geolocation.clearWatch(id); clearTimeout(t);
+        reject(new Error(err.code === 1 ? 'تم رفض إذن الموقع. فعّله من إعدادات المتصفح' : 'تعذّر تحديد موقعك'));
+      }, { enableHighAccuracy: true, maximumAge: 0, timeout: maxMs });
+      const t = setTimeout(finish, maxMs);
+    });
+  }
+
+  /** دائرة الدقة حول نقطتي (قد إيش GPS متأكد) */
+  function accuracyCircle(map, pos) {
+    return L.circle([pos.lat, pos.lng], { radius: pos.accuracy || 30, color: '#2F7BF6', weight: 1, opacity: .5, fillColor: '#2F7BF6', fillOpacity: .12, interactive: false }).addTo(map);
+  }
+
+  /* ---------------------------- البحث المحسّن ----------------------------
+     3 مصادر مع بعض، والنتائج مرتبة حسب التطابق والقرب:
+       1) أماكن نشمي (الي ضافتها الإدارة + وجهات الزباين السابقة)
+       2) Photon — بحث ذكي بيلاقي المحلات والمطاعم والشركات وبيتحمّل الأخطاء
+       3) Nominatim — عناوين وشوارع ومناطق
+     «عبدلي» = «العبدلي»، «مكه» = «مكة»، «ابو» = «أبو» (نفس دالة الخادم src/lib/arabic.js) */
+  const DIG = '٠١٢٣٤٥٦٧٨٩';
+  function normalize(s) {
+    return String(s == null ? '' : s).toLowerCase()
+      .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+      .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
+      .replace(/[٠-٩]/g, (d) => String(DIG.indexOf(d)))
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .split(/\s+/).filter(Boolean)
+      .map((w) => (w.length > 3 && w.startsWith('ال') ? w.slice(2) : w))
+      .map((w) => (w.length > 4 && /^[وب]ال/.test(w) ? w.slice(3) : w))
+      .join(' ');
+  }
+  function matchScore(query, name) {
+    const q = normalize(query), n = normalize(name);
+    if (!q || !n) return 0;
+    if (n === q) return 1;
+    if (n.startsWith(q)) return 0.92;
+    const words = n.split(' ');
+    if (words.some((w) => w.startsWith(q))) return 0.85;
+    if (n.includes(q)) return 0.75;
+    const qw = q.split(' ');
+    const hits = qw.filter((w) => words.some((x) => x.startsWith(w) || (w.length > 3 && x.includes(w)))).length;
+    return hits ? 0.4 + 0.3 * (hits / qw.length) : 0;
+  }
+  const isArabic = (s) => /[\u0600-\u06FF]/.test(s);
+
+  /** صيغ إضافية للبحث: «عبدلي» ← «العبدلي» (الخرائط بتكتب الاسم مع «ال») */
+  function variants(q) {
+    const out = [q.trim()];
+    if (isArabic(q)) {
+      const words = q.trim().split(/\s+/);
+      if (!/^ال/.test(words[0])) out.push(['ال' + words[0], ...words.slice(1)].join(' '));
+      if (words.length > 1 && !/^ال/.test(words[words.length - 1])) out.push([...words.slice(0, -1), 'ال' + words[words.length - 1]].join(' '));
+      const plain = q.replace(/[أإآ]/g, 'ا').replace(/ه$/, 'ة');
+      if (plain !== q) out.push(plain);
+    }
+    return [...new Set(out)].slice(0, 3);
+  }
+
+  const JO_BOX = '34.85,29.15,39.35,33.40';   // حدود الأردن
+  const CATEGORY = {
+    shop: 'محل', supermarket: 'سوبرماركت', convenience: 'بقالة', bakery: 'مخبز', mall: 'مول', clothes: 'ملابس',
+    restaurant: 'مطعم', cafe: 'كافيه', fast_food: 'وجبات سريعة', fuel: 'محطة وقود', pharmacy: 'صيدلية',
+    hospital: 'مستشفى', clinic: 'عيادة', doctors: 'عيادة', school: 'مدرسة', university: 'جامعة', college: 'كلية',
+    bank: 'بنك', atm: 'صراف', place_of_worship: 'مسجد', mosque: 'مسجد', police: 'شرطة', townhall: 'بلدية',
+    hotel: 'فندق', bus_station: 'مجمّع', parking: 'موقف', park: 'حديقة', stadium: 'ملعب', attraction: 'معلم',
+    castle: 'قلعة', office: 'مكتب', company: 'شركة', government: 'دائرة حكومية', car_repair: 'كراج',
+    city: 'مدينة', town: 'بلدة', village: 'قرية', suburb: 'حي', neighbourhood: 'حي', residential: 'شارع',
+    primary: 'شارع', secondary: 'شارع', tertiary: 'شارع', road: 'شارع', place: 'مكان', used: 'مطلوب قبل',
+  };
+  const catLabel = (k, v) => CATEGORY[v] || CATEGORY[k] || '';
+
+  async function getJson(url, ms = 6000) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
+      return res.ok ? await res.json() : null;
+    } catch { return null; } finally { clearTimeout(t); }
+  }
+
+  async function photon(q, near) {
+    const bias = near ? `&lat=${near.lat}&lon=${near.lng}&location_bias_scale=0.4` : '';
+    const data = await getJson(`${cfg.photonUrl}/api/?q=${encodeURIComponent(q)}&limit=10&bbox=${JO_BOX}${bias}`);
+    return ((data && data.features) || []).map((f) => {
+      const p = f.properties || {};
+      const [lng, lat] = f.geometry.coordinates;
+      const place = [p.street, p.district || p.locality, p.city || p.county].filter(Boolean);
+      return {
+        label: p.name || p.street || '', address: [...new Set(place)].join('، '),
+        lat, lng, category: catLabel(p.osm_key, p.osm_value), src: 'photon',
+      };
+    }).filter((r) => r.label);
+  }
+
+  async function nominatim(q, near) {
+    const vb = near ? `&viewbox=${near.lng - 0.35},${near.lat + 0.3},${near.lng + 0.35},${near.lat - 0.3}` : '';
+    const rows = await getJson(`${cfg.geocoderUrl}/search?format=jsonv2&accept-language=ar&limit=8&countrycodes=jo&namedetails=1${vb}&q=${encodeURIComponent(q)}`);
+    return (rows || []).map((r) => ({
+      label: ((r.namedetails && (r.namedetails['name:ar'] || r.namedetails.name)) || r.name || r.display_name.split(',')[0]).trim(),
+      address: r.display_name.split(',').slice(1, 4).join('،').trim(),
+      lat: Number(r.lat), lng: Number(r.lon), category: catLabel(r.category, r.type), src: 'osm',
     }));
+  }
+
+  function distM(a, b) {
+    const r = Math.PI / 180, R = 6371000;
+    const dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+    const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+  }
+
+  /**
+   * @param {string} q نص البحث
+   * @param {{lat:number,lng:number}} [near] مكان الزبون — النتائج القريبة أول
+   */
+  async function search(q, near) {
+    const list = variants(q);
+    const local = window.API && API.searchPlaces ? API.searchPlaces(q, near).then((r) => r.results || []).catch(() => []) : Promise.resolve([]);
+    const jobs = [local, ...list.map((v) => photon(v, near)), ...list.slice(0, 2).map((v) => nominatim(v, near))];
+    const all = (await Promise.all(jobs)).flat();
+    if (!all.length && !navigator.onLine) throw new Error('ما في إنترنت. تأكد من الاتصال وجرّب');
+
+    const out = [];
+    for (const r of all) {
+      if (!Number.isFinite(r.lat) || !Number.isFinite(r.lng)) continue;
+      const text = Math.max(matchScore(q, r.label), matchScore(q, r.address) * 0.7);
+      let score = (r.source === 'nashmi' ? (r.score || text) + 0.1 : text);
+      if (r.category && r.category !== 'شارع') score += 0.04;          // محلات وأماكن قبل الشوارع
+      const d = near ? distM(near, r) : null;
+      if (d != null) score -= Math.min(0.3, d / 150000);                // الأقرب أول
+      const dup = out.find((x) => distM(x, r) < 80 && normalize(x.label) === normalize(r.label));
+      if (dup) { if (score > dup.score) Object.assign(dup, r, { score, distanceM: d }); continue; }
+      out.push({ ...r, score, distanceM: d == null ? undefined : Math.round(d) });
+    }
+    return out.filter((r) => r.score > 0.12).sort((a, b) => b.score - a.score).slice(0, 10);
   }
 
   async function reverse(lat, lng) {
@@ -302,6 +452,6 @@ window.MapKit = (function () {
     KARAK, configure, create,
     pickupIcon, destIcon, meIcon, carIcon, carMarker,
     route, frame, sheetHeight, centerPin, bindCenterPin,
-    locate, search, reverse, bearing,
+    locate, search, reverse, bearing, normalize, matchScore, distM, routeInfo: fetchRoute, locatePrecise, accuracyCircle,
   };
 })();
