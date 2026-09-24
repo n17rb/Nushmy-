@@ -175,11 +175,11 @@ textarea.input { min-height: 96px; padding: var(--s-4) var(--s-5); border-radius
   background: var(--bg); position: relative; z-index: 5;
 }
 .topbar__title { font-size: var(--fs-h3); font-weight: 800; flex: 1; text-align: center; }
-.topbar--floating { position: absolute; inset-block-start: 0; inset-inline: 0; background: none; pointer-events: none; }
+.topbar--floating { position: absolute; inset-block-start: 0; inset-inline: 0; background: none; pointer-events: none; z-index: 450; }
 .topbar--floating > * { pointer-events: auto; }
 
 /* ------------------------- الخريطة ------------------------- */
-.map-wrap { position: absolute; inset: 0; }
+.map-wrap { position: absolute; inset: 0; z-index: 0; isolation: isolate; } /* طبقات Leaflet (200–700) تضل جوّا الخريطة وما تغطي الأزرار */
 #map, .map { position: absolute; inset: 0; background: var(--surface-3); }
 .leaflet-container { font-family: var(--font) !important; background: var(--surface-3); }
 .leaflet-control-container .leaflet-top { z-index: 300; }
@@ -404,9 +404,12 @@ textarea.input { min-height: 96px; padding: var(--s-4) var(--s-5); border-radius
 
 .map--uber { background: #EEF0F2; }
 :root[data-theme="dark"] .map--uber { background: #1B1D22; }
-/* تهدئة خفيفة للألوان حتى تبقى الخريطة خلفية لا تنافس الواجهة */
+/* تهدئة الألوان حتى تبقى الخريطة خلفية لا تنافس الواجهة */
 .map--uber .map-tiles { filter: saturate(.7) contrast(1.02); }
 :root[data-theme="dark"] .map--uber .map-tiles { filter: saturate(.6) brightness(.92); }
+/* OpenStreetMap: رمادي هادي متل أوبر نهاراً، ومقلوب داكن بالليل */
+.map--uber.tiles--osm .map-tiles { filter: grayscale(.92) brightness(1.05) contrast(.92); }
+:root[data-theme="dark"] .map--uber.tiles--osm .map-tiles { filter: invert(1) hue-rotate(180deg) grayscale(.9) brightness(.82) contrast(.95); }
 
 .mk { background: none; border: 0; }
 
@@ -499,3 +502,95 @@ textarea.input { min-height: 96px; padding: var(--s-4) var(--s-5); border-radius
 @media (prefers-reduced-motion: reduce) {
   .mk-search i { opacity: .35; transform: scale(.5); }
 }
+
+/* ------------------------------- الدخول بواتساب ------------------------------- */
+.btn--wa { background: #1FA855; color: #fff; display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; box-shadow: 0 8px 22px rgba(31,168,85,.28); }
+.btn--wa:active { transform: scale(.985); }
+.wa-wait { display: flex; align-items: center; justify-content: center; gap: 10px; margin: var(--s-5) 0; color: var(--text-2); font-weight: 700; }
+.wa-dot { width: 10px; height: 10px; border-radius: 50%; background: #1FA855; animation: pulse 1.2s ease-in-out infinite; }
+.wa-wait.is-ok { color: #1FA855; } .wa-wait.is-ok .wa-dot { animation: none; }
+.wa-wait.is-expired { color: var(--danger-500); } .wa-wait.is-expired .wa-dot { background: var(--danger-500); animation: none; }
+.wa-card { display: grid; gap: 10px; margin-top: var(--s-2); }
+.wa-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.wa-code { font-size: 28px; font-weight: 800; letter-spacing: .18em; direction: ltr; }
+
+/* وسم صغير بجانب اسم المكان (محل، مطعم…) */
+.tag { display: inline-block; font-size: 11px; font-weight: 700; line-height: 1.6; padding: 0 7px; border-radius: var(--r-pill);
+  background: var(--surface-3); color: var(--text-2); vertical-align: 2px; margin-inline-start: 4px; }
+
+/* ------------------------- بطاقة السيارة (Style Bible) ------------------------- */
+.car-art { aspect-ratio: 3 / 2; width: 100%; background: #FFFFFF; border-radius: var(--r-xl); overflow: hidden; display: grid; place-items: center; }
+.car-art img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.car-art__empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 100%;
+  background: var(--surface-2); color: var(--text-3); font-size: 12px; font-weight: 700; text-align: center; padding: 8px; }
+.car-art--sm { width: 96px; border-radius: var(--r-md); flex: none; }
+.car-card { text-align: center; }
+.car-card .car-art { margin-bottom: var(--s-3); }
+.car-card__name { font-weight: 800; font-size: 18px; }
+.car-card__meta { color: var(--text-2); font-weight: 600; margin-top: 2px; display: inline-flex; align-items: center; gap: 6px; }
+.car-card__dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); }
+.car-card__specs { display: flex; justify-content: center; flex-wrap: wrap; gap: 0; margin-top: var(--s-3); font-size: 13px; color: var(--text-2); }
+.car-card__specs span + span::before { content: '|'; margin-inline: 8px; color: var(--text-3); }
+.plate { display: inline-block; margin-top: var(--s-3); padding: 4px 14px; border-radius: 8px; border: 2px solid var(--text); font-weight: 800; letter-spacing: .5px; direction: ltr; background: var(--surface); }
+
+/* ------------------------- المحادثة ------------------------- */
+.chat { background: var(--bg); }
+.chat__scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: var(--s-3) var(--s-4) var(--s-4); }
+.chat__list { display: flex; flex-direction: column; gap: 6px; }
+.chat__day { align-self: center; font-size: 12px; font-weight: 700; color: var(--text-3); background: var(--surface-2, var(--surface)); border-radius: var(--r-pill); padding: 2px 12px; margin: var(--s-3) 0 var(--s-1); }
+.msg { max-width: 80%; padding: 8px 12px 6px; border-radius: 18px; line-height: 1.55; word-break: break-word; box-shadow: var(--shadow-xs); }
+.msg__body { font-size: 15px; }
+.msg__who { font-size: 11px; font-weight: 800; color: var(--brand-600); margin-bottom: 2px; }
+.msg__time { font-size: 10.5px; opacity: .7; margin-top: 2px; text-align: end; direction: ltr; }
+.msg--them { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-start-start-radius: 6px; }
+.msg--me { align-self: flex-end; background: var(--brand-600, #A60E35); color: #fff; border-start-end-radius: 6px; }
+.msg--sys { align-self: center; max-width: 92%; background: var(--surface-3); color: var(--text-2); font-size: 13px; text-align: center; box-shadow: none; }
+.chat__quick { display: flex; gap: var(--s-2); overflow-x: auto; padding: var(--s-2) var(--s-4) 0; scrollbar-width: none; }
+.chat__quick .chip { flex: none; }
+.chat__bar { display: flex; align-items: flex-end; gap: var(--s-2); padding: var(--s-3) var(--s-4) calc(var(--s-3) + var(--safe-b)); background: var(--surface); border-top: 1px solid var(--border); }
+.chat__input { flex: 1; min-height: 44px; max-height: 120px; resize: none; border-radius: 22px; border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); padding: 10px 16px; font: inherit; font-size: 15px; line-height: 1.5; }
+.chat__input:focus { outline: 2px solid var(--brand-500, #A60E35); outline-offset: -1px; }
+.chat__send { width: 44px; height: 44px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--brand-600, #A60E35); color: #fff; }
+.chat__send svg { transform: scaleX(-1); }
+.chat__locked { padding: var(--s-4) var(--s-5) calc(var(--s-4) + var(--safe-b)); text-align: center; font-size: 13px; color: var(--text-3); background: var(--surface); border-top: 1px solid var(--border); }
+.badge { position: absolute; inset-block-start: -4px; inset-inline-end: -4px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; background: #E5243B; color: #fff; font-size: 11px; font-weight: 800; line-height: 19px; text-align: center; box-shadow: 0 0 0 2px var(--surface); }
+.has-badge { position: relative; }
+
+/* ------------------------- الإشعارات ------------------------- */
+.push-card { margin-top: var(--s-2); }
+.notif { align-items: flex-start; }
+.notif--new { background: color-mix(in srgb, var(--brand-600) 6%, transparent); border-radius: var(--r-md); }
+.dot-new { width: 9px; height: 9px; border-radius: 50%; background: var(--brand-600); flex: none; margin-top: 8px; }
+.promo-code { display: inline-block; margin: 6px 0 4px; padding: 4px 12px; border-radius: 10px; border: 1.5px dashed var(--brand-600); color: var(--brand-600); font-weight: 800; font-size: 13px; background: none; }
+
+.acc-hint { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--warning-500); background: var(--warning-100); border-radius: var(--r-md); padding: 8px 12px; margin-bottom: var(--s-3); }
+
+/* ------------------------- شاشة الرحلة: الوقت + السيارة ------------------------- */
+.eta { display: flex; align-items: center; gap: var(--s-3); margin-bottom: var(--s-3); min-height: 24px; }
+.eta__big { font-size: 34px; font-weight: 800; line-height: 1; color: var(--brand-600); }
+.eta__txt { font-size: 14px; font-weight: 700; color: var(--text-2); line-height: 1.4; }
+.car-row { display: flex; align-items: center; gap: var(--s-3); width: 100%; padding: var(--s-2); border-radius: var(--r-lg, 20px); border: 1px solid var(--border); background: var(--surface); }
+.car-row .car-art--sm { width: 104px; }
+.car-row .bold { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }
+.plate--sm { margin: 0; padding: 2px 8px; font-size: 13px; border-width: 1.5px; flex: none; }
+.link-btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: var(--s-3); padding: var(--s-2); background: none; color: var(--text-3); font-size: 13px; font-weight: 700; }
+.chips-wrap { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+
+/* ------------------------- المكالمة داخل التطبيق ------------------------- */
+.callx { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center;
+  background: linear-gradient(160deg, #2A0710, #14171C 60%); color: #fff; animation: fade var(--dur) var(--ease); }
+.callx--out { opacity: 0; transition: opacity .2s; }
+.callx__body { display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  height: 100%; width: 100%; max-width: 480px; padding: calc(var(--safe-t) + 12vh) var(--s-5) calc(var(--safe-b) + var(--s-7)); }
+.callx__who { text-align: center; }
+.callx .avatar--xl { width: 116px; height: 116px; font-size: 40px; margin: 0 auto var(--s-4); box-shadow: 0 0 0 6px rgba(255,255,255,.08); }
+.callx__name { font-size: 26px; font-weight: 800; }
+.callx__sub { font-size: 14px; opacity: .72; margin-top: 4px; }
+.callx__state { font-size: 16px; font-weight: 700; margin-top: var(--s-5); opacity: .9; font-variant-numeric: tabular-nums; }
+.callx__hint { font-size: 12.5px; opacity: .6; text-align: center; }
+.callx__actions { display: flex; gap: var(--s-6); justify-content: center; }
+.callx__btn { display: grid; justify-items: center; gap: 8px; background: none; color: #fff; font-size: 12.5px; font-weight: 700; }
+.callx__btn > svg { width: 64px; height: 64px; padding: 19px; border-radius: 50%; background: rgba(255,255,255,.14); }
+.callx__btn--yes > svg { background: #17805A; }
+.callx__btn--no > svg { background: #D42B3F; transform: rotate(135deg); }
+.callx__btn--mute.on > svg { background: #fff; color: #14171C; }
