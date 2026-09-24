@@ -32,6 +32,18 @@ window.Screens = window.Screens || {};
               <span class="list-item__sub">السجل والفواتير</span></span>
               <span class="list-item__end">${Icon('forward', 18)}</span>
             </button>
+            <button class="list-item" data-notifs>
+              <span class="list-item__icon">${Icon('bell', 20)}</span>
+              <span class="list-item__body"><span class="list-item__title">الإشعارات</span>
+              <span class="list-item__sub">العروض والأكواد والتنبيهات</span></span>
+              <span class="list-item__end">${Icon('forward', 18)}</span>
+            </button>
+            <button class="list-item" data-support>
+              <span class="list-item__icon">${Icon('chat', 20)}</span>
+              <span class="list-item__body"><span class="list-item__title">الدعم الفني</span>
+              <span class="list-item__sub">راسلنا — غرض منسي، إبلاغ، أي سؤال</span></span>
+              <span class="list-item__end">${Icon('forward', 18)}</span>
+            </button>
             <button class="list-item" data-places>
               <span class="list-item__icon">${Icon('pin', 20)}</span>
               <span class="list-item__body"><span class="list-item__title">أماكني</span>
@@ -61,18 +73,20 @@ window.Screens = window.Screens || {};
             ${Icon('logout', 18)} تسجيل الخروج
           </button>
           <p class="xs muted-3" style="text-align:center;padding-bottom:calc(var(--s-6) + var(--safe-b))">
-            نشمي · النسخة 0.1 · الكرك
+            نشمي · النسخة 0.6 · الكرك
           </p>
         </div>
       </section>`);
 
     const labels = { system: 'حسب النظام', light: 'فاتح', dark: 'داكن' };
-    node.querySelector('[data-theme-label]').textContent = labels[UI.getTheme()] || 'حسب النظام';
+    node.querySelector('[data-theme-label]').textContent = labels[UI.getTheme()] || 'فاتح';
 
     node.querySelector('[data-back]').onclick = () => App.go('home');
     node.querySelector('[data-profile]').onclick = () => show(Screens.profile());
     node.querySelector('[data-trips]').onclick = () => show(Screens.trips());
     node.querySelector('[data-places]').onclick = () => show(Screens.places());
+    node.querySelector('[data-notifs]').onclick = () => show(Screens.notifications(() => show(Screens.account())));
+    node.querySelector('[data-support]').onclick = () => show(Screens.support(() => show(Screens.account())));
     node.querySelector('[data-appearance]').onclick = () => show(Screens.appearance());
     node.querySelector('[data-safety]').onclick = () => show(Screens.safety());
     node.querySelector('[data-help]').onclick = () => show(Screens.help());
@@ -184,9 +198,9 @@ window.Screens = window.Screens || {};
   Screens.appearance = function appearanceScreen() {
     const cur = UI.getTheme();
     const opts = [
-      { v: 'system', t: 'حسب النظام', s: 'يتبع إعدادات هاتفك', i: 'settings' },
-      { v: 'light',  t: 'فاتح',       s: 'خلفية بيضاء دائماً',  i: 'sun' },
+      { v: 'light',  t: 'فاتح',       s: 'خلفية بيضاء (الافتراضي)', i: 'sun' },
       { v: 'dark',   t: 'داكن',       s: 'مريح للعين ليلاً',    i: 'moon' },
+      { v: 'system', t: 'حسب الجهاز', s: 'يتبع إعدادات هاتفك', i: 'settings' },
     ];
     const node = el(`
       <section class="screen screen--scroll">
@@ -251,8 +265,8 @@ window.Screens = window.Screens || {};
             <p class="sm">أول رحلة لك رح تظهر هنا</p></div>`;
           return;
         }
-        box.innerHTML = `<div class="list">${trips.map((t) => `
-          <div class="list-item" style="align-items:flex-start">
+        box.innerHTML = `<div class="list">${trips.map((t, i) => `
+          <button class="list-item" style="align-items:flex-start" data-i="${i}">
             <span class="list-item__icon ${t.status === 'TRIP_COMPLETED' ? 'list-item__icon--brand' : ''}">
               ${Icon(t.status === 'TRIP_COMPLETED' ? 'car' : 'close', 20)}
             </span>
@@ -264,7 +278,10 @@ window.Screens = window.Screens || {};
               <span class="bold num" style="color:var(--text)">${esc(t.fareText)}</span>
               <span class="xs muted-3" style="display:block">د.أ</span>
             </span>
-          </div>`).join('')}</div>`;
+          </button>`).join('')}</div>
+          <p class="sm muted-3" style="text-align:center;margin:var(--s-4) 0">نسيت غرض أو بدك تبلّغ؟ افتح الرحلة</p>`;
+        box.querySelectorAll('[data-i]').forEach((b) => b.onclick = () =>
+          show(Inbox.tripDetail({ trip: trips[Number(b.dataset.i)], back: () => show(Screens.trips()) })));
       } catch (e) {
         box.innerHTML = `<p class="sm muted-3">${esc(e.message)}</p>`;
       }
@@ -395,10 +412,19 @@ window.Screens = window.Screens || {};
             <div class="list-item"><span class="list-item__icon">${Icon('close', 20)}</span>
               <span class="list-item__body"><span class="list-item__title">الإلغاء والرسوم</span>
               <span class="list-item__sub">الإلغاء قبل قبول الكابتن مجاني دائماً</span></span></div>
+            <div class="list-item"><span class="list-item__icon">${Icon('search', 20)}</span>
+              <span class="list-item__body"><span class="list-item__title">نسيت غرض بالسيارة؟</span>
+              <span class="list-item__sub">من «رحلاتي» افتح الرحلة واضغط «نسيت غرض بالسيارة»</span></span></div>
           </div>
+          <button class="btn btn--primary" style="margin-top:var(--s-5)" data-support>${Icon('chat', 18)} راسل الدعم الفني</button>
         </div>
       </section>`);
     node.querySelector('[data-back]').onclick = () => show(Screens.account());
+    node.querySelector('[data-support]').onclick = () => show(Screens.support(() => show(Screens.help())));
     return node;
   };
+
+  /* ----------------------- الإشعارات والدعم (من inbox.js) ----------------------- */
+  Screens.notifications = (back) => Inbox.notifications({ as: 'customer', back: back || (() => App.go('home')) });
+  Screens.support = (back) => Inbox.support({ as: 'customer', back: back || (() => App.go('home')) });
 })();
