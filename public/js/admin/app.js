@@ -130,6 +130,7 @@ window.Admin = (function () {
       phone = node.querySelector('#lg-phone').value.trim();
       UI.busy(e.currentTarget, true);
       try {
+        if (state.cfg && state.cfg.loginMode === 'wa_link') return waStep(phone, e.currentTarget);
         const r = await API.requestOtp(phone);
         node.querySelector('[data-step="phone"]').classList.add('hidden');
         node.querySelector('[data-step="code"]').classList.remove('hidden');
@@ -148,6 +149,27 @@ window.Admin = (function () {
         await start();
       } catch (x) { fail(x.message); UI.busy(e.currentTarget, false); }
     };
+    // الدخول بواتساب: المشرف بيبعت الرمز لرقم نشمي ومنفتح الجلسة لما توصل الرسالة
+    async function waStep(ph, btn) {
+      const r = await API.post('/api/auth/wa/start', { phone: ph }, { auth: false });
+      const box = node.querySelector('[data-step="phone"]');
+      box.innerHTML = `
+        <p class="muted sm" style="margin:0">اكبس الزر وابعت الرسالة الجاهزة لرقم نشمي من نفس رقمك، وارجع هون.</p>
+        <a class="btn btn--primary btn--block" style="background:#1FA855" href="${esc(r.link)}" target="_blank" rel="noopener">افتح واتساب وأرسل</a>
+        <p class="sm" style="margin:0">أو ابعت الرمز <b class="num">${esc(r.code)}</b> لـ <bdi dir="ltr"><b class="num">+${esc(r.number)}</b></bdi></p>
+        <p class="muted xs" data-wa-state style="margin:0">بانتظار رسالتك…</p>`;
+      const until = Date.now() + r.expiresInSec * 1000;
+      const t = setInterval(async () => {
+        if (Date.now() > until) { clearInterval(t); fail('انتهت صلاحية الطلب. حدّث الصفحة وجرّب مرة ثانية'); return; }
+        try {
+          const res = await API.post('/api/auth/wa/check', { id: r.id }, { auth: false });
+          if (res.accessToken) { clearInterval(t); API.setToken(res.accessToken); await start(); }
+          else if (res.status === 'EXPIRED' || res.status === 'USED') { clearInterval(t); fail('انتهت صلاحية الطلب. حدّث الصفحة وجرّب مرة ثانية'); }
+        } catch (x) { if (x.code === 'WA_NOT_FOUND') { clearInterval(t); fail(x.message); } }
+      }, 2500);
+      UI.busy(btn, false);
+    }
+
     node.querySelector('#lg-phone').addEventListener('keydown', (e) => { if (e.key === 'Enter') node.querySelector('[data-send]').click(); });
     node.querySelector('#lg-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') node.querySelector('[data-verify]').click(); });
   }
@@ -175,9 +197,14 @@ window.Admin = (function () {
     { path: 'captains', label: 'الكباتن', icon: 'user', count: 'captains' },
     { path: 'deposits', label: 'شحن المحافظ', icon: 'wallet', count: 'deposits' },
     { path: 'customers', label: 'العملاء', icon: 'user' },
+    { path: 'chats', label: 'المحادثات', icon: 'chat', count: 'chats', perm: 'support' },
+    { path: 'alerts', label: 'التنبيهات', icon: 'bell', count: 'alerts' },
+    { path: 'broadcasts', label: 'الإشعارات والعروض', icon: 'bell', perm: 'broadcast' },
+    { path: 'places', label: 'الأماكن المشهورة', icon: 'pin', perm: 'places' },
+    { path: 'cars', label: 'صور السيارات', icon: 'car2', perm: 'settings' },
     { path: 'pricing', label: 'الأسعار', icon: 'receipt', perm: 'pricing' },
     { path: 'settings', label: 'الإعدادات', icon: 'settings', perm: 'settings' },
-    { path: 'whatsapp', label: 'واتساب', icon: 'chat', perm: 'settings' },
+    { path: 'whatsapp', label: 'التحقق من الرقم', icon: 'check', perm: 'settings' },
     { path: 'admins', label: 'المشرفون', icon: 'shield', perm: 'admins' },
     { path: 'audit', label: 'سجل العمليات', icon: 'doc' },
   ];
@@ -219,7 +246,10 @@ window.Admin = (function () {
   async function refreshCounts() {
     try {
       const d = await API.get('/api/admin/dashboard');
-      state.counts = { captains: d.kpis.pendingCaptains, deposits: d.kpis.pendingDeposits };
+      let chats = 0, alerts = 0;
+      try { chats = (await API.get('/api/admin/chats/badge')).waiting; } catch {}
+      try { alerts = (await API.get('/api/admin/alerts')).unread; } catch {}
+      state.counts = { captains: d.kpis.pendingCaptains, deposits: d.kpis.pendingDeposits, chats, alerts };
       document.querySelectorAll('[data-count]').forEach((c) => {
         const n = state.counts[c.dataset.count] || 0;
         c.textContent = n; c.classList.toggle('hidden', !n);
@@ -270,7 +300,7 @@ window.Admin = (function () {
   window.addEventListener('hashchange', () => { if (state.me) route(); });
   window.addEventListener('DOMContentLoaded', async () => {
     UI.applyTheme(UI.getTheme());
-    try { const c = await API.config(); MapKit.configure(c.maps || {}); } catch {}
+    try { const c = await API.config(); state.cfg = c; MapKit.configure(c.maps || {}); } catch {}
     const go = async () => { if (await API.tryRefresh()) start(); else loginScreen(); };
     if (document.readyState === 'complete' || window.L) go(); else window.addEventListener('load', go, { once: true });
   });
