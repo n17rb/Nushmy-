@@ -580,7 +580,7 @@
       'fare.recalc_threshold_bp': { label: 'إعادة حساب الأجرة إذا زادت المسافة الفعلية عن التقدير بنسبة', ...pct },
       'wallet.cliq_alias': { label: 'اسم CliQ اللي بيحوّل عليه الكباتن لشحن محافظهم' },
     };
-    const GROUPS = [['platform.', 'المنصة والعمولة'], ['wallet.', 'المحفظة'], ['dispatch.', 'توزيع الطلبات'], ['cancel.', 'الإلغاء'], ['trip.', 'الرحلات'], ['captain.', 'الكباتن'], ['fare.', 'الأجرة']];
+    const GROUPS = [['platform.', 'المنصة والعمولة'], ['wallet.', 'المحفظة'], ['dispatch.', 'توزيع الطلبات'], ['cancel.', 'الإلغاء'], ['trip.', 'الرحلات'], ['captain.', 'الكباتن'], ['fare.', 'الأجرة'], ['maps.', 'الخرائط'], ['support.', 'الدعم الفني'], ['call.', 'المكالمة داخل التطبيق']];
     const rows = d.settings.filter((s) => !HIDE.includes(s.key));
     const group = (prefix) => rows.filter((s) => s.key.startsWith(prefix));
     const node = render(main, `
@@ -633,71 +633,134 @@
   P.whatsapp = async (main) => {
     const MARK = { ok: ['✓', 'ok'], warn: ['!', 'warn'], bad: ['✕', 'bad'], todo: ['…', 'live'] };
     const node = render(main, `
-      ${head('واتساب', 'رموز الدخول على واتساب. الصفحة بتحكي مع Meta مباشرة وبتقلك بالضبط شو ناقص.')}
-      <div class="panel" data-steps><div class="skeleton" style="height:180px"></div></div>
-      <div class="panel" data-actions></div>`);
-    const stepsEl = node.querySelector('[data-steps]');
-    const actEl = node.querySelector('[data-actions]');
+      ${head('التحقق من الرقم', 'تحقق مجاني وآمن عن طريق واتساب: الزبون بيبعت رمز لرقم نشمي، وواتساب بيضمن إن الرسالة من رقمه.')}
+      <div data-body><div class="panel"><div class="skeleton" style="height:220px"></div></div></div>`);
+    const body = node.querySelector('[data-body]');
     const errBox = (e) => e ? `<div class="wa-err"><b>${esc(e.ar || '')}</b>${e.message ? `<div class="change" style="margin-top:6px">${esc(e.message)}${e.code ? ` (code ${esc(e.code)}${e.subcode ? '/' + esc(e.subcode) : ''})` : ''}</div>` : ''}</div>` : '';
+    const copyRow = (label, text) => `<div class="wa-copy"><span class="muted xs" style="min-width:92px">${label}</span><code>${esc(text)}</code><button class="btn btn--ghost" data-copy="${esc(text)}" style="min-height:32px;padding:0 10px;font-size:12.5px">نسخ</button></div>`;
+    const when = (iso) => iso ? new Date(iso).toLocaleString('ar-JO', { timeZone: 'Asia/Amman', dateStyle: 'medium', timeStyle: 'short' }) : '';
+    const MODE_AR = { dev: 'رمز على الشاشة (تجربة — مش آمن)', whatsapp_link: 'واتساب — الزبون بيبعت الرمز ✓', whatsapp: 'واتساب بقالب', android: 'SMS', twilio: 'SMS' };
 
     async function load() {
-      stepsEl.innerHTML = '<div class="skeleton" style="height:180px"></div>';
       let d;
       try { d = await API.get(api('/whatsapp')); }
-      catch (e) { stepsEl.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
-      stepsEl.innerHTML = `
-        <div class="panel__title"><h2>الفحص</h2><div class="spacer"></div>
-          ${d.ready || d.provider === 'whatsapp' ? '<span class="pill pill--ok">جاهز</span>' : '<span class="pill pill--warn">مش جاهز لسا</span>'}
-          <button class="btn btn--ghost" data-reload>إعادة الفحص</button></div>
-        <ol class="wa-steps">${d.steps.map((s) => `
-          <li class="wa-step wa-step--${MARK[s.state][1]}">
-            <span class="wa-mark">${MARK[s.state][0]}</span>
-            <div><b>${esc(s.title)}</b><p>${esc(s.detail)}</p>${errBox(s.error)}</div>
-          </li>`).join('')}</ol>`;
-      stepsEl.querySelector('[data-reload]').onclick = load;
+      catch (e) { body.innerHTML = `<div class="panel"><p class="muted">${esc(e.message)}</p></div>`; return; }
+      const st = d.setup || {};
+      const byKey = Object.fromEntries(d.steps.map((x) => [x.key, x]));
+      const coreBad = d.steps.filter((x) => x.group === 'أساسيات' && (x.state === 'bad' || x.state === 'todo'));
+      const step = (n, done, title, html) => `
+        <li class="wz ${done ? 'wz--done' : ''}"><span class="wz__n">${done ? '✓' : n}</span>
+          <div class="wz__b"><b>${title}</b>${html}</div></li>`;
 
-      const tplStep = d.steps.find((s) => s.key === 'template');
-      const tokenOk = d.steps.some((s) => s.key === 'token' && s.state === 'ok');
-      actEl.innerHTML = `
-        <div class="panel__title"><h2>الأدوات</h2></div>
-        <div style="display:grid;gap:18px">
-          <div>
-            <b>1. إنشاء القالب «${esc(d.template)}»</b>
-            <p class="muted sm" style="margin:4px 0 10px">بيعمل قالب المصادقة (لغة ${esc(d.lang)}، زر «نسخ الرمز») مباشرة عند Meta. إذا رفضت، بيطلعلك السبب الحقيقي.</p>
-            <button class="btn btn--primary" data-create ${tokenOk && tplStep && tplStep.canCreate ? '' : 'disabled'}>إنشاء القالب</button>
-            <div data-create-out></div>
-          </div>
-          <div>
-            <b>2. إرسال رمز تجربة</b>
-            <p class="muted sm" style="margin:4px 0 10px">بيبعت رمز على واتساب بنفس شكل رسالة الدخول. فاضي = رقمك إنت.</p>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-              <input class="in" data-phone inputmode="tel" placeholder="07XXXXXXXX (اختياري)" style="max-width:220px;direction:ltr;text-align:start">
-              <button class="btn btn--ok" data-test ${tokenOk ? '' : 'disabled'}>إرسال رمز تجربة</button>
+      body.innerHTML = `
+        <div class="panel">
+          <div class="panel__title"><h2>الإعداد — 4 خطوات</h2><div class="spacer"></div>
+            <span class="pill ${st.mode === 'whatsapp_link' ? 'pill--ok' : 'pill--warn'}">${esc(MODE_AR[st.mode] || st.mode)}</span>
+            <button class="btn btn--ghost" data-reload>إعادة الفحص</button></div>
+          ${coreBad.length ? `<div class="wa-err" style="margin-bottom:12px"><b>قبل كل إشي:</b> ${coreBad.map((x) => esc(x.title + ': ' + x.detail)).join(' — ')}</div>` : ''}
+          <ol class="wz-list">
+            ${step(1, st.appSecretSet, 'حط «App Secret»', `
+              <p>developers.facebook.com ← تطبيقك Nashmi ← <b>إعدادات التطبيق ← أساسي</b> ← جنب App Secret اكبس «إظهار» ← انسخه والصقه هون.</p>
+              ${st.appSecretFromEnv ? '<p class="muted xs">محطوط من Render ✓</p>' : `
+              <div class="wa-copy"><input class="in" type="password" data-secret placeholder="${st.appSecretSet ? 'محفوظ ✓ — الصق واحد جديد لتغييره' : '32 حرف ورقم'}" autocomplete="off" style="max-width:320px;direction:ltr"><button class="btn btn--primary" data-save-secret>حفظ</button></div>`}`)}
+            ${step(2, Boolean(st.webhookVerifiedAt), 'اربط الـ Webhook بـ Meta', `
+              <p>developers.facebook.com ← تطبيقك ← <b>WhatsApp ← Configuration</b> ← Webhook ← <b>Edit</b>، الصق هدول واكبس <b>Verify and save</b>:</p>
+              ${copyRow('Callback URL', d.webhookUrl)}
+              ${copyRow('Verify token', st.verifyToken || '')}
+              <p style="margin-top:8px">بعدها بنفس الصفحة: <b>Webhook fields ← Manage</b> ← جنب <b>messages</b> اكبس <b>Subscribe</b>.</p>
+              ${st.webhookVerifiedAt ? `<p class="muted xs">Meta أكّدت الرابط: ${esc(when(st.webhookVerifiedAt))}</p>` : ''}`)}
+            ${step(3, Boolean(st.subscribed && st.lastInbound), 'انشر التطبيق وجرّب رسالة', `
+              <p><b>إعدادات التطبيق ← أساسي</b> بـ Meta حط هدول، واحفظ، وبعدين من القائمة <b>نشر ← Publish</b>:</p>
+              ${copyRow('Privacy Policy', st.privacyUrl || '')}
+              ${copyRow('Data deletion', st.deletionUrl || '')}
+              <div class="wa-copy" style="margin-top:10px">
+                <button class="btn ${st.subscribed ? 'btn--ghost' : 'btn--primary'}" data-sub ${st.subscribed ? 'disabled' : ''}>${st.subscribed ? 'الاستقبال مربوط ✓' : 'ربط الاستقبال'}</button>
+              </div>
+              <p style="margin-top:8px">بعدين من تلفونك ابعت <b>«مرحبا»</b> على واتساب لرقم نشمي — لازم يرجعلك رد تلقائي — واكبس «إعادة الفحص».</p>
+              ${st.lastInbound ? `<p class="muted xs">آخر رسالة وصلت: ${esc(when(st.lastInbound))}</p>` : ''}
+              <div data-sub-out></div>`)}
+            ${step(4, st.mode === 'whatsapp_link', 'شغّل التحقق بواتساب', `
+              <p>أول ما يصير الـ 3 فوق ✓، اكبس الزر. من هون ورايح كل زبون وكابتن بيأكد رقمه برسالة واتساب. وإذا صار أي إشي بترجع بكبسة.</p>
+              <div class="wa-copy">
+                <button class="btn btn--ok" data-mode="whatsapp_link" ${d.linkReady && st.mode !== 'whatsapp_link' ? '' : 'disabled'}>شغّل التحقق بواتساب</button>
+                <button class="btn btn--ghost" data-mode="dev" ${st.mode === 'dev' ? 'disabled' : ''}>رجّع لرمز على الشاشة</button>
+              </div>
+              <div data-mode-out></div>
+              ${st.mode === 'whatsapp_link' ? '<p class="muted xs" style="margin-top:8px">بعد ما تتأكد إنه شغال: احذف <b>OTP_DEV_SHOW</b> من Render.</p>' : ''}`)}
+          </ol>
+        </div>
+
+        <details class="panel" data-details>
+          <summary style="cursor:pointer;font-weight:800">تفاصيل الفحص</summary>
+          ${(() => {
+            const groups = [];
+            d.steps.forEach((x) => { let g = groups.find((y) => y.name === x.group); if (!g) groups.push(g = { name: x.group, steps: [] }); g.steps.push(x); });
+            return groups.map((g) => `<h3 class="wa-group">${esc(g.name)}</h3><ol class="wa-steps">${g.steps.map((x) => `
+              <li class="wa-step wa-step--${MARK[x.state][1]}"><span class="wa-mark">${MARK[x.state][0]}</span>
+                <div style="min-width:0"><b>${esc(x.title)}</b><p>${esc(x.detail)}</p>${errBox(x.error)}</div></li>`).join('')}</ol>`).join('');
+          })()}
+        </details>
+
+        <div class="panel">
+          <div class="panel__title"><h2>إضافات (اختياري)</h2></div>
+          <div style="display:grid;gap:20px">
+            <div>
+              <b>رسائل SMS للي ما عنده واتساب</b>
+              <p class="muted sm" style="margin:4px 0 10px">${d.sms && d.sms.fallback
+                ? `المزوّد: <b>${esc(d.sms.fallback === 'android' ? 'تلفون أندرويد (رقمك)' : d.sms.fallback)}</b> — ${d.sms.configured ? 'مجهّز ✓' : 'بياناته ناقصة بـ Render'}`
+                : 'مش مفعّل (زر «ما عندي واتساب» مش ظاهر للزباين).'}</p>
+              <div class="wa-copy">
+                <input class="in" data-sms-phone inputmode="tel" placeholder="07XXXXXXXX (اختياري)" style="max-width:200px;direction:ltr;text-align:start">
+                <button class="btn btn--ghost" data-sms-test ${d.sms && d.sms.configured ? '' : 'disabled'}>إرسال SMS تجربة</button>
+              </div>
+              <div data-sms-out></div>
             </div>
-            <div data-test-out></div>
+            <div>
+              <b>قالب رسالة الرمز (لما يصير عندك سجل تجاري وتوثّق حسابك)</b>
+              <p class="muted sm" style="margin:4px 0 10px">بعد التوثيق، نشمي بيقدر يبعت الرمز للزبون بدل ما الزبون يبعته.</p>
+              <div class="wa-copy">
+                <button class="btn btn--ghost" data-create ${byKey.template && byKey.template.canCreate && byKey.token && byKey.token.state === 'ok' ? '' : 'disabled'}>إنشاء القالب</button>
+              </div>
+              <div data-create-out></div>
+            </div>
           </div>
         </div>`;
-      const create = actEl.querySelector('[data-create]');
-      create.onclick = async () => {
-        const out = actEl.querySelector('[data-create-out]');
-        const r = await act(create, () => API.post(api('/whatsapp/template')));
-        if (!r) return;
-        out.innerHTML = r.ok
-          ? `<div class="wa-ok">${r.exists ? 'القالب موجود أصلاً ✓' : `انعمل القالب ✓ — حالته: ${esc(r.status || 'PENDING')}. Meta بتراجعه عادةً خلال دقائق، اكبس «إعادة الفحص» بعد شوي.`}</div>`
-          : errBox(r.error);
-        if (r.ok) setTimeout(load, 1500);
+
+      body.querySelector('[data-reload]').onclick = load;
+      const run = (sel, fn, okMsg, outSel) => {
+        const b = body.querySelector(sel); if (!b) return;
+        b.onclick = async () => {
+          const out = body.querySelector(outSel);
+          const r = await act(b, fn);
+          if (!r) return;
+          if (r.success === false) { out.innerHTML = errBox(r.error); return; }
+          if (out) out.innerHTML = `<div class="wa-ok">${okMsg(r)}</div>`;
+          setTimeout(load, 900);
+        };
       };
-      const test = actEl.querySelector('[data-test]');
-      test.onclick = async () => {
-        const out = actEl.querySelector('[data-test-out]');
-        const phone = actEl.querySelector('[data-phone]').value.trim();
-        const r = await act(test, () => API.post(api('/whatsapp/test'), phone ? { phone } : {}));
-        if (!r) return;
-        out.innerHTML = r.ok
-          ? `<div class="wa-ok">انبعت ✓ على ${esc(r.to)} — شيك واتساب. إذا وصلك، غيّر SMS_PROVIDER لـ whatsapp بـ Render.</div>`
-          : errBox(r.error);
+      const saveBtn = body.querySelector('[data-save-secret]');
+      if (saveBtn) saveBtn.onclick = async () => {
+        const v = body.querySelector('[data-secret]').value.trim();
+        if (!v) { toast('الصق الـ App Secret أول', 'error'); return; }
+        if (await act(saveBtn, () => API.post(api('/whatsapp/secret'), { appSecret: v }), 'انحفظ ✓')) load();
       };
+      run('[data-sub]', () => API.post(api('/whatsapp/subscribe')), () => 'انربط ✓ — هلأ ابعت «مرحبا» لرقم نشمي.', '[data-sub-out]');
+      body.querySelectorAll('[data-mode]').forEach((b) => {
+        b.onclick = async () => {
+          const m = b.dataset.mode;
+          if (m === 'dev' && !(await UI.confirm({ title: 'ترجع لرمز على الشاشة؟', body: 'بهاد الوضع أي حدا بيقدر يدخل على أي رقم. استخدمه للتجربة بس.', confirmText: 'رجّع', danger: true }))) return;
+          const r = await act(b, () => API.post(api('/auth-mode'), { mode: m }), m === 'dev' ? 'رجع لرمز على الشاشة' : 'صار التحقق بواتساب ✓');
+          if (r) load();
+        };
+      });
+      run('[data-sms-test]', () => { const v = body.querySelector('[data-sms-phone]').value.trim(); return API.post(api('/sms/test'), v ? { phone: v } : {}); },
+        (r) => `انبعتت ✓ على ${esc(r.to)}`, '[data-sms-out]');
+      run('[data-create]', () => API.post(api('/whatsapp/template')), (r) => r.exists ? 'القالب موجود أصلاً ✓' : `انعمل ✓ — ${esc(r.status || 'PENDING')}`, '[data-create-out]');
     }
+    node.addEventListener('click', async (e) => {
+      const c = e.target.closest('[data-copy]'); if (!c) return;
+      try { await navigator.clipboard.writeText(c.dataset.copy); toast('انسخ ✓', 'success'); } catch { toast(c.dataset.copy); }
+    });
     await load();
   };
 
