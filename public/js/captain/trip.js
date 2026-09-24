@@ -31,6 +31,7 @@ window.CapScreens = window.CapScreens || {};
       map = MapKit.create(node.querySelector('#tripMap'), { center: lastPos || t.pickup, zoom: 15 });
       if (lastPos) meCar = MapKit.carMarker(map, lastPos, lastPos.heading);
       drawTarget();
+      placeRider();
     }, 30);
 
     async function drawTarget() {
@@ -52,6 +53,8 @@ window.CapScreens = window.CapScreens || {};
       lastPos = p;
       if (map) { if (meCar) meCar.glideTo(p, p.heading); else meCar = MapKit.carMarker(map, p, p.heading); }
       if (!routeFor && map) drawTarget();
+      const ap = node.querySelector('[data-approach]');
+      if (ap) ap.innerHTML = approachHtml();
       if ((t.status === 'DRIVER_ARRIVING' || t.status === 'DRIVER_ACCEPTED') && !nearNotified
           && CapKit.distance(p, t.pickup) <= NEAR_M) {
         nearNotified = true;
@@ -74,7 +77,7 @@ window.CapScreens = window.CapScreens || {};
           <button class="nav-banner__go" data-nav>${Icon('navigate', 16)} ملاحة</button>
         </div>`;
       const b = node.querySelector('[data-nav]');
-      if (b) b.onclick = () => CapKit.navigate(tg);
+      if (b) b.onclick = () => CapKit.navigate(t.status !== 'TRIP_STARTED' && t.riderLocation ? { ...tg, lat: t.riderLocation.lat, lng: t.riderLocation.lng } : tg);
     }
 
     /* ----------------------------- اللوح السفلي ----------------------------- */
@@ -86,7 +89,8 @@ window.CapScreens = window.CapScreens || {};
           <div class="cust__name">${esc(c.firstName || 'الزبون')}</div>
           <div class="sm muted-3">${esc(t.code)} · ${esc(t.estFareText)} د.أ كاش</div>
         </div>
-        ${c.phone ? `<a class="round-btn round-btn--call" href="tel:${esc(c.phone)}" aria-label="اتصال بالزبون">${Icon('phone', 20)}</a>` : ''}
+        <button class="round-btn has-badge" data-chat aria-label="رسالة للزبون">${Icon('chat', 20)}<span data-chat-badge></span></button>
+        <button class="round-btn round-btn--call" data-call aria-label="مكالمة بالتطبيق">${Icon('phone', 20)}</button>
         <button class="round-btn" data-more aria-label="خيارات">${Icon('menu', 20)}</button>
       </div>`;
     }
@@ -103,6 +107,8 @@ window.CapScreens = window.CapScreens || {};
           <div class="sheet__grip"></div>
           ${custRow()}
           <div class="sm muted" style="margin:var(--s-4) 0 var(--s-2)">${esc(t.pickup.address || '')}</div>
+          ${t.pickupNote ? `<div class="note-card">${Icon('pin', 16)} <span>${esc(t.pickupNote)}</span></div>` : ''}
+          <div class="approach" data-approach>${approachHtml()}</div>
           ${near ? `<div class="near-hint">${Icon('checkCircle', 18)} أنت عند الزبون</div>` : ''}
           <button class="btn ${near ? 'btn--accept' : 'btn--primary'}" style="min-height:58px;font-size:18px" data-arrived>وصلت</button>`;
         panel.querySelector('[data-arrived]').onclick = async (e) => {
@@ -159,6 +165,42 @@ window.CapScreens = window.CapScreens || {};
       }
       const more = panel.querySelector('[data-more]');
       if (more) more.onclick = moreMenu;
+      const callBtn = panel.querySelector('[data-call]');
+      if (callBtn) callBtn.onclick = () => CallKit.start({ tripId: t.id, as: 'captain' });
+      const chatBtn = panel.querySelector('[data-chat]');
+      if (chatBtn) chatBtn.onclick = () => {
+        show(Inbox.tripChat({ tripId: t.id, as: 'captain', peerName: t.customer && t.customer.firstName, back: () => show(S.trip(t)) }));
+      };
+      syncChatBadge();
+    }
+
+    /* المسافة الدقيقة للزبون (بالمتر لما تقرب) + موقعه المباشر لو شاركه */
+    function approachHtml() {
+      if (!lastPos) return '';
+      const goal = t.riderLocation || t.pickup;
+      const d = Math.round(CapKit.distance(lastPos, goal));
+      const txt = d < 1000 ? `${d < 30 ? 'أقل من 30' : Math.round(d / 5) * 5} م` : `${(d / 1000).toFixed(1)} كم`;
+      return `<b class="num">${txt}</b> <span>${t.riderLocation ? 'عن مكان الزبون الحالي (شارك موقعه المباشر)' : 'عن نقطة الانطلاق'}</span>`;
+    }
+    let riderMarker = null;
+    function placeRider() {
+      if (!map) return;
+      const r = t.riderLocation;
+      if (!r) { if (riderMarker) { riderMarker.remove(); riderMarker = null; } return; }
+      if (riderMarker) riderMarker.setLatLng([r.lat, r.lng]);
+      else riderMarker = L.marker([r.lat, r.lng], { icon: L.divIcon({ className: 'mk', html: '<div class="mk-rider"><i></i><span>الزبون</span></div>', iconSize: [0, 0] }), interactive: false, zIndexOffset: 800 }).addTo(map);
+    }
+    let lastUnread = -1;
+    async function syncChatBadge() {
+      const b = node.querySelector('[data-chat-badge]');
+      if (!b) return;
+      try {
+        const c = await API.chat.unread('captain');
+        const n = (c.trips || {})[t.id] || 0;
+        if (n > lastUnread && lastUnread >= 0) { toast('رسالة جديدة من الزبون'); if (navigator.vibrate) navigator.vibrate(150); }
+        lastUnread = n;
+        b.innerHTML = ChatUI.badge(n);
+      } catch {}
     }
 
     /* ----------------------------- الإلغاء ----------------------------- */
@@ -171,10 +213,12 @@ window.CapScreens = window.CapScreens || {};
         s.node.querySelector('[data-close]').onclick = s.close;
         return;
       }
+      const phone = t.customer && t.customer.phone;
       const reasons = ['عطل بالسيارة', 'الزبون طلب مني ألغي', 'ما بقدر أوصل للمكان', 'سبب ثاني'];
       const s = UI.sheet(`
         <h2 class="h2" style="margin-bottom:var(--s-2)">إلغاء الرحلة؟</h2>
         <p class="muted sm" style="margin:0 0 var(--s-4)">بنرجّع الطلب للبحث عن كابتن ثاني فوراً حتى ما يتعطل الزبون. الإلغاء بينحسب بنسبة إلغاءاتك.</p>
+        ${phone ? `<a class="btn btn--ghost" style="margin-bottom:var(--s-3)" href="tel:${esc(phone)}">${Icon('phone', 18)} اتصال عادي بالزبون (بيكلّف رصيد)</a>` : ''}
         <div class="reason-list">${reasons.map((r) => `<button data-r="${esc(r)}">${esc(r)}</button>`).join('')}</div>
         <button class="btn btn--danger" data-go disabled>إلغاء الرحلة</button>
         <button class="btn btn--ghost" style="margin-top:var(--s-3)" data-close>تراجع</button>`);
@@ -214,14 +258,19 @@ window.CapScreens = window.CapScreens || {};
           return;
         }
         t = r.trip;
+        placeRider();
         if (t.status !== prev) { render(); drawTarget(); }
+        else { const ap = node.querySelector('[data-approach]'); if (ap) ap.innerHTML = approachHtml(); }
+        if (++polls % 2 === 0) syncChatBadge();
       } catch (err) {
         if (err.code === 'NOT_FOUND') { leave(); App.go('home'); }
       }
     }
+    let polls = 0;
+    CallKit.watch();                        // مكالمة واردة من الزبون
     poll = setInterval(refresh, 3000);
 
-    function leave() { clearInterval(poll); clearInterval(clock); unsubscribe(); }
+    function leave() { clearInterval(poll); clearInterval(clock); unsubscribe(); CallKit.unwatch(); }
     UI.onLeave(node, leave);
 
     render();
